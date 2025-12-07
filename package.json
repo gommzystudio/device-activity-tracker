@@ -33,6 +33,7 @@
     "postinstall": "cd client && npm install"
   },
   "dependencies": {
+    "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "cors": "^2.8.5",
     "express": "^5.2.1",
