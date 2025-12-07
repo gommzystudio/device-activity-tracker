@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
+import {Eye, EyeOff, Plus} from 'lucide-react';
 import { socket } from '../App';
 import { ContactCard } from './ContactCard';
 
@@ -34,6 +34,7 @@ export function Dashboard() {
     const [inputNumber, setInputNumber] = useState('');
     const [contacts, setContacts] = useState<Map<string, ContactInfo>>(new Map());
     const [error, setError] = useState<string | null>(null);
+    const [privacyMode, setPrivacyMode] = useState(false);
 
     useEffect(() => {
         function onTrackerUpdate(update: any) {
@@ -161,7 +162,30 @@ export function Dashboard() {
         <div className="space-y-6">
             {/* Add Contact Form */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Track Contacts</h2>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-semibold text-gray-900">Track Contacts</h2>
+                    <button
+                        onClick={() => setPrivacyMode(!privacyMode)}
+                        className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-all duration-200 ${
+                            privacyMode 
+                                ? 'bg-green-600 text-white hover:bg-green-700 shadow-md' 
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                        title={privacyMode ? 'Privacy Mode: ON (Click to disable)' : 'Privacy Mode: OFF (Click to enable)'}
+                    >
+                        {privacyMode ? (
+                            <>
+                                <EyeOff size={20} />
+                                <span>Privacy ON</span>
+                            </>
+                        ) : (
+                            <>
+                                <Eye size={20} />
+                                <span>Privacy OFF</span>
+                            </>
+                        )}
+                    </button>
+                </div>
                 <div className="flex gap-4">
                     <input
                         type="text"
@@ -200,6 +224,7 @@ export function Dashboard() {
                             presence={contact.presence}
                             profilePic={contact.profilePic}
                             onRemove={() => handleRemove(contact.jid)}
+                            privacyMode={privacyMode}
                         />
                     ))}
                 </div>

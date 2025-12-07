@@ -28,6 +28,7 @@ interface ContactCardProps {
     presence: string | null;
     profilePic: string | null;
     onRemove: () => void;
+    privacyMode?: boolean;
 }
 
 export function ContactCard({
@@ -38,7 +39,8 @@ export function ContactCard({
     deviceCount,
     presence,
     profilePic,
-    onRemove
+    onRemove,
+    privacyMode = false
 }: ContactCardProps) {
     const lastData = data[data.length - 1];
     const currentStatus = devices.length > 0
@@ -47,11 +49,14 @@ export function ContactCard({
             devices[0].state)
         : 'Unknown';
 
+    // Blur phone number in privacy mode
+    const blurredNumber = privacyMode ? displayNumber.replace(/\d/g, '•') : displayNumber;
+
     return (
         <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg border border-gray-200 overflow-hidden">
             {/* Header with Stop Button */}
             <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">{displayNumber}</h3>
+                <h3 className="text-lg font-semibold text-gray-900">{blurredNumber}</h3>
                 <button
                     onClick={onRemove}
                     className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 font-medium transition-colors text-sm"
@@ -67,7 +72,17 @@ export function ContactCard({
                         <div className="relative mb-4">
                             <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-100 border-4 border-white shadow-md">
                                 {profilePic ? (
-                                    <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
+                                    <img
+                                        src={profilePic}
+                                        alt="Profile"
+                                        className={clsx(
+                                            "w-full h-full object-cover transition-all duration-200",
+                                            privacyMode && "blur-xl scale-110"
+                                        )}
+                                        style={privacyMode ? {
+                                            filter: 'blur(16px) contrast(0.8)',
+                                        } : {}}
+                                    />
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-gray-400">
                                         No Image
@@ -81,7 +96,7 @@ export function ContactCard({
                             )} />
                         </div>
 
-                        <h4 className="text-xl font-bold text-gray-900 mb-1">{displayNumber}</h4>
+                        <h4 className="text-xl font-bold text-gray-900 mb-1">{blurredNumber}</h4>
 
                         <div className="flex items-center gap-2 mb-4">
                             <span className={clsx(

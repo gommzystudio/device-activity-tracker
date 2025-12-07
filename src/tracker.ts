@@ -289,7 +289,7 @@ export class WhatsAppTracker {
             median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 
 
-            threshold = median * 0.8;
+            threshold = median * 0.9;
 
             if (movingAvg < threshold) {
                 metrics.state = 'An (Online)';
@@ -319,7 +319,7 @@ export class WhatsAppTracker {
 
         // Calculate global stats for backward compatibility
         const globalMedian = this.calculateGlobalMedian();
-        const globalThreshold = globalMedian * 0.8;
+        const globalThreshold = globalMedian * 0.9;
 
         const data = {
             devices,
