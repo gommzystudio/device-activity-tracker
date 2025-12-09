@@ -33,6 +33,7 @@
     "postinstall": "cd client && npm install"
   },
   "dependencies": {
+    "@influxdata/influxdb-client": "^1.35.0",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "cors": "^2.8.5",
     "express": "^5.2.1",

@@ -15,9 +15,30 @@ import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeys
 import { pino } from 'pino';
 import { Boom } from '@hapi/boom';
 import { WhatsAppTracker } from './tracker';
+import { db } from './database';
 
 const app = express();
 app.use(cors());
+app.use(express.json());
+
+// Auth endpoint for web app access
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+    const validUsername = process.env.ADMIN_USERNAME || 'admin';
+    const validPassword = process.env.ADMIN_PASSWORD;
+
+    if (!validPassword) {
+        console.error('ADMIN_PASSWORD environment variable is not set!');
+        res.status(500).json({ success: false, error: 'Server configuration error' });
+        return;
+    }
+
+    if (username === validUsername && password === validPassword) {
+        res.json({ success: true });
+    } else {
+        res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
+});
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -76,6 +97,11 @@ async function connectToWhatsApp() {
     });
 }
 
+// Initialize database
+db.initialize().catch(err => {
+    console.error('Failed to initialize database:', err);
+});
+
 connectToWhatsApp();
 
 io.on('connection', (socket) => {
@@ -130,6 +156,11 @@ io.on('connection', (socket) => {
 
                 io.emit('profile-pic', { jid: result.jid, url: ppUrl });
                 io.emit('contact-name', { jid: result.jid, name: contactName });
+
+                // Write to database
+                db.writeContactEvent(result.jid, 'added', cleanNumber).catch(err =>
+                    console.error('Failed to write contact event to database:', err)
+                );
             } else {
                 socket.emit('error', { jid: targetJid, message: 'Number not on WhatsApp' });
             }
@@ -146,11 +177,31 @@ io.on('connection', (socket) => {
             tracker.stopTracking();
             trackers.delete(jid);
             socket.emit('contact-removed', jid);
+
+            // Write to database
+            db.writeContactEvent(jid, 'removed').catch(err =>
+                console.error('Failed to write contact event to database:', err)
+            );
         }
     });
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+    console.log('\nShutting down gracefully...');
+    await db.flush();
+    await db.close();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    console.log('\nShutting down gracefully...');
+    await db.flush();
+    await db.close();
+    process.exit(0);
 });

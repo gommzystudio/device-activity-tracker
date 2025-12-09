@@ -1,6 +1,7 @@
 import '@whiskeysockets/baileys';
 import { WASocket, proto } from '@whiskeysockets/baileys';
 import { pino } from 'pino';
+import { db } from './database';
 
 const logger = pino({ level: 'debug' });
 
@@ -228,6 +229,7 @@ export class WhatsAppTracker {
         }
 
         const metrics = this.deviceMetrics.get(jid)!;
+        const previousState = metrics.state;
 
         if (rtt <= 5000) {
             // 1. Add to device's recent RTTs for moving average (last 3)
@@ -258,6 +260,19 @@ export class WhatsAppTracker {
         metrics.lastUpdate = Date.now();
 
         this.determineDeviceState(jid);
+
+        // Write to database
+        db.writeRTT(this.targetJid, rtt, metrics.state, jid).catch(err =>
+            logger.error(err, 'Failed to write RTT to database')
+        );
+
+        // Write state change if state changed
+        if (previousState !== metrics.state) {
+            db.writeStateChange(this.targetJid, previousState, metrics.state, jid).catch(err =>
+                logger.error(err, 'Failed to write state change to database')
+            );
+        }
+
         this.sendUpdate();
     }
 

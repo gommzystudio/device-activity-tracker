@@ -38,13 +38,49 @@ cd device-activity-tracker
 # Install dependencies
 npm install
 cd client && npm install && cd ..
+
+# Set up authentication credentials
+cp .env.example .env
+# Edit .env and set ADMIN_PASSWORD to a secure password
 ```
 
-**Requirements:** Node.js 20+, npm, WhatsApp account
+**Requirements:** Node.js 20+, npm, WhatsApp account, Docker & Docker Compose (for containerized deployment)
+
+## Configuration
+
+Before running the application, you must configure authentication credentials:
+
+1. Copy the example environment file: `cp .env.example .env`
+2. Edit `.env` and set a secure `ADMIN_PASSWORD`
+3. Optionally change `ADMIN_USERNAME` (defaults to `admin`)
+4. Optionally customize InfluxDB credentials for database security
+
+**Security Note:** Never commit the `.env` file to version control. It's already in `.gitignore`.
+
+### Data Persistence
+
+The application now includes **InfluxDB** for persistent storage of tracking data:
+
+- **RTT measurements** - All round-trip time data saved automatically
+- **Device states** - Activity state changes (Online/Standby/Offline) tracked over time
+- **Contact events** - Records when contacts are added/removed
+- **Automatic retention** - Data persists across server restarts
+- **Historical analysis** - Query patterns and trends over days, weeks, or months
+
+The database runs automatically when using Docker Compose. All data is stored in Docker volumes and survives container restarts.
 
 ## Usage
 
-### Web Interface (Recommended)
+### Docker Deployment (Recommended)
+
+```bash
+# Make sure .env is configured first!
+docker-compose up -d
+```
+
+Then open `http://localhost:3000` and log in with your configured credentials.
+
+### Development Mode
 
 ```bash
 # Terminal 1: Start backend
@@ -54,7 +90,7 @@ npm run start:server
 npm run start:client
 ```
 
-Open `http://localhost:3000`, scan QR code with WhatsApp, then enter phone number to track (e.g., `491701234567`).
+Open `http://localhost:3000`, log in, scan QR code with WhatsApp, then enter phone number to track (e.g., `491701234567`).
 
 ### CLI Interface
 
