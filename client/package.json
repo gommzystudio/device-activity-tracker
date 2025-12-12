@@ -51,5 +51,13 @@
     "autoprefixer": "^10.4.22",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17"
+  },
+  "overrides": {
+    "nth-check": "^2.0.1",
+    "webpack-dev-server": "^4.15.2",
+    "resolve-url-loader": {
+      "postcss": "^8.4.31"
+    }
   }
 }
+
