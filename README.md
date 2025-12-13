@@ -106,14 +106,6 @@ In the web interface, you can switch between probe methods using the dropdown in
 
 - **Not Connecting to WhatsApp**: Delete the `auth_info_baileys/` folder and re-scan the QR code.
 
-- **Enabling Signal Support**: Signal support is optional and auto-detected. To enable it, run the signal-cli-rest-api Docker container:
-  ```bash
-  docker run -d --name signal-api -p 8080:8080 \
-    -v $HOME/.local/share/signal-api:/home/.local/share/signal-cli \
-    -e 'MODE=json-rpc' bbernhard/signal-cli-rest-api
-  ```
-  Then link your Signal account via http://localhost:8080/v1/qrcodelink?device_name=activity-tracker
-
 ## Project Structure
 
 ```
