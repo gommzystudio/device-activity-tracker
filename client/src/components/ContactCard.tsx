@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Square, Activity, Wifi, Smartphone, Monitor, MessageCircle } from 'lucide-react';
+import { Square, Activity, Wifi, Smartphone, Monitor, MessageCircle, History } from 'lucide-react';
 import clsx from 'clsx';
+import { HistoryModal } from './HistoryModal';
 
 type Platform = 'whatsapp' | 'signal';
 
@@ -14,11 +15,36 @@ interface TrackerData {
     timestamp: number;
 }
 
+interface StateHistoryEntry {
+    state: string;
+    timestamp: number;
+    rtt: number;
+}
+
+interface Percentiles {
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+}
+
+
+interface CalibrationData {
+    isCalibrated: boolean;
+    samplesCollected: number;
+    requiredSamples: number;
+}
+
 interface DeviceInfo {
     jid: string;
     state: string;
     rtt: number;
     avg: number;
+    ema?: number;
+    stateHistory?: StateHistoryEntry[];
+    percentiles?: Percentiles;
+    rttHistory?: number[];
+    calibration?: CalibrationData;
 }
 
 interface ContactCardProps {
@@ -46,17 +72,40 @@ export function ContactCard({
     privacyMode = false,
     platform = 'whatsapp'
 }: ContactCardProps) {
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+
     const lastData = data[data.length - 1];
     const currentStatus = devices.length > 0
         ? (devices.find(d => d.state === 'OFFLINE')?.state ||
             devices.find(d => d.state.includes('Online'))?.state ||
+            devices.find(d => d.state.includes('Active'))?.state ||
             devices[0].state)
         : 'Unknown';
+
+    // Get enhanced data from first device
+    const primaryDevice = devices[0];
+    const hasHistoryData = primaryDevice && primaryDevice.stateHistory && primaryDevice.stateHistory.length > 0;
+
+    // Check calibration status
+    const isCalibrating = primaryDevice?.calibration && !primaryDevice.calibration.isCalibrated;
+    const calibrationProgress = primaryDevice?.calibration?.samplesCollected || 0;
+    const calibrationRequired = primaryDevice?.calibration?.requiredSamples || 300;
 
     // Blur phone number in privacy mode
     const blurredNumber = privacyMode ? displayNumber.replace(/\d/g, '•') : displayNumber;
 
     return (
+        <>
+        <HistoryModal
+            isOpen={isHistoryModalOpen}
+            onClose={() => setIsHistoryModalOpen(false)}
+            contactName={displayNumber}
+            stateHistory={primaryDevice?.stateHistory || []}
+            rttHistory={primaryDevice?.rttHistory || []}
+            percentiles={primaryDevice?.percentiles || { p25: 0, p50: 0, p75: 0, p90: 0 }}
+            platform={platform}
+        />
+
         <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg border border-gray-200 overflow-hidden">
             {/* Header with Stop Button */}
             <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
@@ -70,13 +119,47 @@ export function ContactCard({
                     </span>
                     <h3 className="text-lg font-semibold text-gray-900">{blurredNumber}</h3>
                 </div>
-                <button
-                    onClick={onRemove}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 font-medium transition-colors text-sm"
-                >
-                    <Square size={16} /> Stop
-                </button>
+                <div className="flex items-center gap-2">
+                    {hasHistoryData && (
+                        <button
+                            onClick={() => setIsHistoryModalOpen(true)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium transition-colors text-sm"
+                        >
+                            <History size={16} /> View History
+                        </button>
+                    )}
+                    <button
+                        onClick={onRemove}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 font-medium transition-colors text-sm"
+                    >
+                        <Square size={16} /> Stop
+                    </button>
+                </div>
             </div>
+
+            {/* Calibration Progress Indicator */}
+            {isCalibrating && (
+                <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-yellow-800">
+                                Calibrating device activity patterns...
+                            </p>
+                            <p className="text-xs text-yellow-600 mt-1">
+                                {calibrationProgress}/{calibrationRequired} samples collected ({Math.round((calibrationProgress / calibrationRequired) * 100)}%)
+                            </p>
+                        </div>
+                        <div className="flex-shrink-0">
+                            <div className="w-24 bg-yellow-200 rounded-full h-2">
+                                <div
+                                    className="bg-yellow-600 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${Math.min((calibrationProgress / calibrationRequired) * 100, 100)}%` }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -105,7 +188,11 @@ export function ContactCard({
                             <div className={clsx(
                                 "absolute bottom-2 right-2 w-6 h-6 rounded-full border-2 border-white",
                                 currentStatus === 'OFFLINE' ? "bg-red-500" :
-                                    currentStatus.includes('Online') ? "bg-green-500" : "bg-gray-400"
+                                    currentStatus === 'App Active' ? "bg-green-500 animate-pulse" :
+                                    currentStatus === 'App Minimized' ? "bg-blue-500" :
+                                    currentStatus === 'Screen On (Idle)' ? "bg-yellow-500" :
+                                    currentStatus === 'Standby' ? "bg-orange-500" :
+                                    currentStatus.includes('Calibrating') ? "bg-gray-400 animate-pulse" : "bg-gray-400"
                             )} />
                         </div>
 
@@ -115,8 +202,11 @@ export function ContactCard({
                             <span className={clsx(
                                 "px-3 py-1 rounded-full text-sm font-medium",
                                 currentStatus === 'OFFLINE' ? "bg-red-100 text-red-700" :
-                                    currentStatus.includes('Online') ? "bg-green-100 text-green-700" :
-                                        currentStatus === 'Standby' ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-700"
+                                    currentStatus === 'App Active' ? "bg-green-100 text-green-700" :
+                                    currentStatus === 'App Minimized' ? "bg-blue-100 text-blue-700" :
+                                    currentStatus === 'Screen On (Idle)' ? "bg-yellow-100 text-yellow-700" :
+                                    currentStatus === 'Standby' ? "bg-orange-100 text-orange-700" :
+                                    currentStatus.includes('Calibrating') ? "bg-gray-100 text-gray-700" : "bg-gray-100 text-gray-700"
                             )}>
                                 {currentStatus}
                             </span>
@@ -147,8 +237,11 @@ export function ContactCard({
                                             <span className={clsx(
                                                 "px-2 py-0.5 rounded text-xs font-medium",
                                                 device.state === 'OFFLINE' ? "bg-red-100 text-red-700" :
-                                                    device.state.includes('Online') ? "bg-green-100 text-green-700" :
-                                                        device.state === 'Standby' ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-700"
+                                                    device.state === 'App Active' ? "bg-green-100 text-green-700" :
+                                                    device.state === 'App Minimized' ? "bg-blue-100 text-blue-700" :
+                                                    device.state === 'Screen On (Idle)' ? "bg-yellow-100 text-yellow-700" :
+                                                    device.state === 'Standby' ? "bg-orange-100 text-orange-700" :
+                                                    device.state.includes('Calibrating') ? "bg-gray-100 text-gray-700" : "bg-gray-100 text-gray-700"
                                             )}>
                                                 {device.state}
                                             </span>
@@ -198,5 +291,6 @@ export function ContactCard({
                 </div>
             </div>
         </div>
+        </>
     );
 }
