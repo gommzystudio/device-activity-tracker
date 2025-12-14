@@ -15,6 +15,89 @@ const logger = pino({
 export type ProbeMethod = 'delete' | 'reaction';
 
 /**
+ * Device state enumeration
+ */
+enum DeviceState {
+    OFFLINE = 'OFFLINE',
+    APP_FOREGROUND = 'App Active',
+    APP_MINIMIZED = 'App Minimized',
+    SCREEN_ON = 'Screen On (Idle)',
+    SCREEN_OFF = 'Standby',
+    CALIBRATING = 'Calibrating...'
+}
+
+/**
+ * State thresholds combining absolute and network-adjusted values
+ */
+interface StateThresholds {
+    // Absolute thresholds from research (baseline)
+    absolute: {
+        veryActive: number;    // App in foreground
+        minimized: number;     // App minimized but screen on
+        screenOn: number;      // Screen on, app background
+        screenOff: number;     // Screen off / deep standby
+    };
+    // Network-adjusted thresholds (absolute + network baseline)
+    adjusted: {
+        veryActive: number;
+        minimized: number;
+        screenOn: number;
+        screenOff: number;
+    };
+    // Percentile-based boundaries (for sanity checks)
+    percentiles: {
+        p25: number;
+        p50: number;
+        p75: number;
+        p90: number;
+    };
+}
+
+/**
+ * Calibration state tracking
+ */
+interface CalibrationState {
+    samplesCollected: number;
+    requiredSamples: number;       // 300 minimum
+    networkBaseline: number;        // Median of first 100 samples
+    isCalibrated: boolean;
+    calibrationStartedAt: number;
+}
+
+/**
+ * Temporal pattern detection for transition ramps
+ */
+interface TemporalPattern {
+    windowSize: number;             // 30 seconds
+    samples: Array<{rtt: number; timestamp: number}>;
+    trendDirection: 'rising' | 'falling' | 'stable';
+    transitionDetected: boolean;
+}
+
+/**
+ * State hysteresis to prevent flapping
+ */
+interface StateHysteresis {
+    currentState: string;
+    stateEnteredAt: number;
+    minimumStateDuration: number;   // 10 seconds
+    transitionMargin: number;       // Must cross threshold by 20% margin
+}
+
+/**
+ * Per-state sample tracking
+ */
+interface StateStatistics {
+    state: string;
+    sampleCount: number;
+    avgRTT: number;
+    minRTT: number;
+    maxRTT: number;
+    firstSeen: number;
+    lastSeen: number;
+}
+
+/**
  * Logger utility for debug and normal mode
  */
 class TrackerLogger {
@@ -73,10 +156,22 @@ const trackerLogger = new TrackerLogger();
  */
 interface DeviceMetrics {
     rttHistory: number[];      // Historical RTT measurements (up to 2000)
-    recentRtts: number[];      // Recent RTTs for moving average (last 3)
-    state: string;             // Current device state (Online/Standby/Calibrating/Offline)
+    recentRtts: number[];      // Recent RTTs for exponential moving average (last 10)
+    state: string;             // Current device state (Active/Online/Standby/Calibrating/Offline)
     lastRtt: number;           // Most recent RTT measurement
     lastUpdate: number;        // Timestamp of last update
+    ema: number;               // Exponential moving average for smoother detection
+    stateChangedAt: number;    // Timestamp when state last changed (for hysteresis)
+    stateHistory: Array<{state: string, timestamp: number, rtt: number}>; // Historical states
+    baselineP25: number;       // 25th percentile (very active)
+    baselineP50: number;       // 50th percentile (median)
+    baselineP75: number;       // 75th percentile (standby threshold)
+    baselineP90: number;       // 90th percentile (deep standby)
+    // New fields for improved accuracy
+    calibration: CalibrationState;       // Calibration state
+    thresholds: StateThresholds;         // Hybrid thresholds
+    temporalPattern: TemporalPattern;    // Temporal pattern detection
+    stateStats: Map<string, StateStatistics>;  // Per-state statistics
 }
 
 /**
@@ -432,10 +527,26 @@ export class WhatsAppTracker {
                 recentRtts: [],
                 state: 'OFFLINE',
                 lastRtt: timeout,
-                lastUpdate: Date.now()
+                lastUpdate: Date.now(),
+                ema: 0,
+                stateChangedAt: Date.now(),
+                stateHistory: [{state: 'OFFLINE', timestamp: Date.now(), rtt: timeout}],
+                baselineP25: 0,
+                baselineP50: 0,
+                baselineP75: 0,
+                baselineP90: 0,
+                // New fields
+                calibration: this.initializeCalibration(),
+                thresholds: this.initializeThresholds(),
+                temporalPattern: this.initializeTemporalPattern(),
+                stateStats: new Map<string, StateStatistics>()
             });
         } else {
             const metrics = this.deviceMetrics.get(jid)!;
+            if (metrics.state !== 'OFFLINE') {
+                metrics.stateHistory.push({state: 'OFFLINE', timestamp: Date.now(), rtt: timeout});
+                metrics.stateChangedAt = Date.now();
+            }
             metrics.state = 'OFFLINE';
             metrics.lastRtt = timeout;
             metrics.lastUpdate = Date.now();
@@ -456,9 +567,21 @@ export class WhatsAppTracker {
             this.deviceMetrics.set(jid, {
                 rttHistory: [],
                 recentRtts: [],
-                state: 'Calibrating...',
+                state: DeviceState.CALIBRATING,
                 lastRtt: rtt,
-                lastUpdate: Date.now()
+                lastUpdate: Date.now(),
+                ema: rtt, // Initialize EMA with first value
+                stateChangedAt: Date.now(),
+                stateHistory: [{state: DeviceState.CALIBRATING, timestamp: Date.now(), rtt: rtt}],
+                baselineP25: 0,
+                baselineP50: 0,
+                baselineP75: 0,
+                baselineP90: 0,
+                // New fields
+                calibration: this.initializeCalibration(),
+                thresholds: this.initializeThresholds(),
+                temporalPattern: this.initializeTemporalPattern(),
+                stateStats: new Map<string, StateStatistics>()
             });
         }
 
@@ -466,19 +589,54 @@ export class WhatsAppTracker {
 
         // Only add measurements if we actually received a CLIENT ACK (rtt <= 5000ms)
         if (rtt <= 5000) {
-            // 1. Add to device's recent RTTs for moving average (last 3)
-            metrics.recentRtts.push(rtt);
-            if (metrics.recentRtts.length > 3) {
-                metrics.recentRtts.shift();
+            // Filter outliers using MAD (Median Absolute Deviation) before adding
+            const isOutlier = this.isOutlier(rtt, metrics.rttHistory);
+
+            if (!isOutlier || metrics.rttHistory.length < 10) {
+                // 1. Add to device's recent RTTs (last 10 for better smoothing)
+                metrics.recentRtts.push(rtt);
+                if (metrics.recentRtts.length > 10) {
+                    metrics.recentRtts.shift();
+                }
+
+                // 2. Update EMA (Exponential Moving Average) - more weight on recent data
+                const alpha = 0.3; // Smoothing factor (0.3 = 30% weight on new value)
+                metrics.ema = alpha * rtt + (1 - alpha) * metrics.ema;
+
+                // 3. Add to device's history for calibration (last 2000)
+                metrics.rttHistory.push(rtt);
+                if (metrics.rttHistory.length > 2000) {
+                    metrics.rttHistory.shift();
+                }
+
+                // 4. Update calibration state
+                metrics.calibration.samplesCollected = metrics.rttHistory.length;
+
+                // Calculate network baseline after 100 samples
+                if (metrics.calibration.samplesCollected === 100) {
+                    metrics.calibration.networkBaseline = this.calculateNetworkBaseline(metrics.rttHistory);
+                    this.updateAdjustedThresholds(metrics.thresholds, metrics.calibration.networkBaseline);
+                    trackerLogger.debug(
+                        `[CALIBRATION] ${jid}: Network baseline calculated: ${metrics.calibration.networkBaseline.toFixed(0)}ms`
+                    );
+                }
+
+                // Mark as calibrated after 300 samples
+                if (metrics.calibration.samplesCollected >= metrics.calibration.requiredSamples && !metrics.calibration.isCalibrated) {
+                    metrics.calibration.isCalibrated = true;
+                    trackerLogger.info(
+                        `\n✅ Device ${jid} calibration complete (${metrics.calibration.samplesCollected} samples, ` +
+                        `baseline: ${metrics.calibration.networkBaseline.toFixed(0)}ms)\n`
+                    );
+                }
+
+                // 5. Update temporal pattern
+                this.updateTemporalPattern(metrics.temporalPattern, rtt, Date.now());
+            } else {
+                trackerLogger.debug(`[OUTLIER FILTERED] RTT ${rtt}ms for ${jid} - likely network spike`);
             }
 
-            // 2. Add to device's history for calibration (last 2000), filtering outliers > 5000ms
-            metrics.rttHistory.push(rtt);
-            if (metrics.rttHistory.length > 2000) {
-                metrics.rttHistory.shift();
-            }
-
-            // 3. Add to global history for global threshold calculation
+            // 6. Add to global history for global threshold calculation
             this.globalRttHistory.push(rtt);
             if (this.globalRttHistory.length > 2000) {
                 this.globalRttHistory.shift();
@@ -496,16 +654,219 @@ export class WhatsAppTracker {
     }
 
     /**
-     * Determine device state (Online/Standby/Offline) based on RTT analysis
+     * Initialize thresholds with absolute values from research
+     */
+    private initializeThresholds(): StateThresholds {
+        return {
+            absolute: {
+                veryActive: 350,    // App in foreground (~350ms RTT from research)
+                minimized: 500,     // App minimized (~500ms RTT)
+                screenOn: 1000,     // Screen on, app background (~1000ms RTT)
+                screenOff: 1500     // Screen off (>1000ms RTT, using 1500ms as threshold)
+            },
+            adjusted: {
+                veryActive: 350,    // Will be updated after network baseline calculation
+                minimized: 500,
+                screenOn: 1000,
+                screenOff: 1500
+            },
+            percentiles: {
+                p25: 0,
+                p50: 0,
+                p75: 0,
+                p90: 0
+            }
+        };
+    }
+
+    /**
+     * Initialize calibration state
+     */
+    private initializeCalibration(): CalibrationState {
+        return {
+            samplesCollected: 0,
+            requiredSamples: 300,        // 300 samples minimum for calibration
+            networkBaseline: 0,           // Will be calculated from first 100 samples
+            isCalibrated: false,
+            calibrationStartedAt: Date.now()
+        };
+    }
+
+    /**
+     * Initialize temporal pattern tracking
+     */
+    private initializeTemporalPattern(): TemporalPattern {
+        return {
+            windowSize: 30000,            // 30 seconds in milliseconds
+            samples: [],
+            trendDirection: 'stable',
+            transitionDetected: false
+        };
+    }
+
+    /**
+     * Calculate network baseline from first 100 RTT samples
+     * @param rttHistory Array of RTT measurements
+     * @returns Network baseline (median of first 100 samples)
+     */
+    private calculateNetworkBaseline(rttHistory: number[]): number {
+        if (rttHistory.length < 100) return 0;
+
+        // Take first 100 samples
+        const firstSamples = rttHistory.slice(0, 100);
+        return this.calculateMedian(firstSamples);
+    }
+
+    /**
+     * Update adjusted thresholds based on network baseline
+     * @param thresholds StateThresholds object to update
+     * @param networkBaseline Network baseline RTT
+     */
+    private updateAdjustedThresholds(thresholds: StateThresholds, networkBaseline: number) {
+        // Don't adjust if baseline is unreasonably high (network issues during calibration)
+        const adjustment = networkBaseline > 500 ? 0 : networkBaseline;
+
+        thresholds.adjusted.veryActive = thresholds.absolute.veryActive + adjustment;
+        thresholds.adjusted.minimized = thresholds.absolute.minimized + adjustment;
+        thresholds.adjusted.screenOn = thresholds.absolute.screenOn + adjustment;
+        thresholds.adjusted.screenOff = thresholds.absolute.screenOff + adjustment;
+    }
+
+    /**
+     * Update temporal pattern with new RTT sample
+     * @param pattern TemporalPattern to update
+     * @param rtt New RTT measurement
+     * @param timestamp Timestamp of measurement
+     */
+    private updateTemporalPattern(pattern: TemporalPattern, rtt: number, timestamp: number) {
+        // Add new sample
+        pattern.samples.push({ rtt, timestamp });
+
+        // Remove samples older than window size
+        const cutoffTime = timestamp - pattern.windowSize;
+        pattern.samples = pattern.samples.filter(s => s.timestamp >= cutoffTime);
+
+        // Detect trend if we have enough samples (at least 10 samples over 30 seconds)
+        if (pattern.samples.length >= 10) {
+            const trend = this.detectTrend(pattern.samples);
+            pattern.trendDirection = trend.direction;
+            pattern.transitionDetected = trend.isTransition;
+        }
+    }
+
+    /**
+     * Detect trend in temporal pattern using linear regression
+     * @param samples Array of RTT samples with timestamps
+     * @returns Trend information
+     */
+    private detectTrend(samples: Array<{rtt: number; timestamp: number}>): {
+        direction: 'rising' | 'falling' | 'stable';
+        isTransition: boolean;
+    } {
+        if (samples.length < 10) {
+            return { direction: 'stable', isTransition: false };
+        }
+
+        // Simple linear regression to calculate slope
+        const n = samples.length;
+        let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+
+        // Use relative timestamps (0, 1, 2, ...) for X axis
+        samples.forEach((sample, i) => {
+            sumX += i;
+            sumY += sample.rtt;
+            sumXY += i * sample.rtt;
+            sumXX += i * i;
+        });
+
+        const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+
+        // Determine trend direction
+        // Rising: slope > 10ms per sample (significant increase)
+        // Falling: slope < -10ms per sample (significant decrease)
+        const direction: 'rising' | 'falling' | 'stable' =
+            slope > 10 ? 'rising' :
+            slope < -10 ? 'falling' :
+            'stable';
+
+        // Transition detected if rising significantly (app going to background)
+        // Threshold: RTT increase of > 200ms over 30 seconds
+        const firstRTT = samples[0].rtt;
+        const lastRTT = samples[samples.length - 1].rtt;
+        const rttChange = lastRTT - firstRTT;
+        const isTransition = direction === 'rising' && rttChange > 200;
+
+        return { direction, isTransition };
+    }
+
+    /**
+     * Detect outliers using MAD (Median Absolute Deviation) - more robust than standard deviation
+     * @param value The value to check
+     * @param history Array of historical values
+     * @returns true if the value is an outlier
+     */
+    private isOutlier(value: number, history: number[]): boolean {
+        if (history.length < 10) return false; // Need enough data
+
+        const median = this.calculateMedian(history);
+        const deviations = history.map(val => Math.abs(val - median));
+        const mad = this.calculateMedian(deviations);
+
+        // Modified Z-score using MAD
+        // UPDATED: Value is outlier only if modified z-score > 10 AND value > 5000ms
+        // This prevents filtering legitimate state changes while still catching extreme network glitches
+        const modifiedZScore = 0.6745 * (value - median) / (mad + 0.0001); // Add small value to avoid division by zero
+
+        return Math.abs(modifiedZScore) > 10 && value > 5000;
+    }
+
+    /**
+     * Calculate median of an array
+     */
+    private calculateMedian(arr: number[]): number {
+        if (arr.length === 0) return 0;
+        const sorted = [...arr].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+
+    /**
+     * Calculate percentile of an array
+     */
+    private calculatePercentile(arr: number[], percentile: number): number {
+        if (arr.length === 0) return 0;
+        const sorted = [...arr].sort((a, b) => a - b);
+        const index = (percentile / 100) * (sorted.length - 1);
+        const lower = Math.floor(index);
+        const upper = Math.ceil(index);
+        const weight = index - lower;
+        return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+    }
+
+    /**
+     * Update baseline percentiles for device-specific thresholds
+     */
+    private updateBaselines(metrics: DeviceMetrics) {
+        if (metrics.rttHistory.length < 20) return; // Need minimum samples
+
+        metrics.baselineP25 = this.calculatePercentile(metrics.rttHistory, 25);
+        metrics.baselineP50 = this.calculatePercentile(metrics.rttHistory, 50);
+        metrics.baselineP75 = this.calculatePercentile(metrics.rttHistory, 75);
+        metrics.baselineP90 = this.calculatePercentile(metrics.rttHistory, 90);
+    }
+
+    /**
+     * Determine device state based on absolute RTT thresholds and temporal patterns
      * @param jid Device JID
      */
     private determineDeviceState(jid: string) {
         const metrics = this.deviceMetrics.get(jid);
         if (!metrics) return;
 
+        // 1. Check for OFFLINE state
         // If device is marked as OFFLINE (no CLIENT ACK received), keep that state
-        // Only change back to Online/Standby if we receive new measurements
-        if (metrics.state === 'OFFLINE') {
+        // Only change back to active states if we receive new measurements
+        if (metrics.state === DeviceState.OFFLINE) {
             // Check if this is a new measurement (device came back online)
             if (metrics.lastRtt <= 5000 && metrics.recentRtts.length > 0) {
                 trackerLogger.debug(`[DEVICE ${jid}] Device came back online (RTT: ${metrics.lastRtt}ms)`);
@@ -516,49 +877,131 @@ export class WhatsAppTracker {
             }
         }
 
-        // Calculate device's moving average
-        const movingAvg = metrics.recentRtts.reduce((a: number, b: number) => a + b, 0) / metrics.recentRtts.length;
-
-        // Calculate global median and threshold
-        let median = 0;
-        let threshold = 0;
-
-        if (this.globalRttHistory.length >= 3) {
-            const sorted = [...this.globalRttHistory].sort((a, b) => a - b);
-            const mid = Math.floor(sorted.length / 2);
-            median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-
-
-            threshold = median * 0.9;
-
-            if (movingAvg < threshold) {
-                metrics.state = 'Online';
-            } else {
-                metrics.state = 'Standby';
-            }
-        } else {
-            metrics.state = 'Calibrating...';
+        // 2. Check calibration state - need 300 samples for reliable classification
+        if (!metrics.calibration.isCalibrated) {
+            const progress = metrics.calibration.samplesCollected;
+            const required = metrics.calibration.requiredSamples;
+            metrics.state = `${DeviceState.CALIBRATING} (${progress}/${required})`;
+            trackerLogger.debug(`[DEVICE ${jid}] Still calibrating: ${progress}/${required} samples`);
+            return;
         }
 
-        // Normal mode: Formatted output
-        trackerLogger.formatDeviceState(jid, metrics.lastRtt, movingAvg, median, threshold, metrics.state);
+        // 3. Update device-specific baseline percentiles (for reference/validation)
+        this.updateBaselines(metrics);
+
+        // 4. Use EMA (Exponential Moving Average) for smoother classification
+        const currentRTT = metrics.ema;
+
+        // 5. HYSTERESIS: Prevent rapid state flipping
+        // State must be stable for at least 10 seconds before changing
+        const MIN_STATE_DURATION = 10000; // 10 seconds
+        const timeSinceStateChange = Date.now() - metrics.stateChangedAt;
+        const canChangeState = timeSinceStateChange > MIN_STATE_DURATION;
+
+        // 6. Determine new state using ABSOLUTE THRESHOLDS with 20% hysteresis margin
+        let newState: string;
+        const thresholds = metrics.thresholds.adjusted;
+        const MARGIN = 1.2; // 20% margin to prevent bouncing at boundaries
+
+        // 7. Check for temporal transition patterns first
+        if (metrics.temporalPattern.transitionDetected && metrics.temporalPattern.trendDirection === 'rising') {
+            // App is transitioning to background (rising RTT over 30 seconds)
+            newState = DeviceState.APP_MINIMIZED;
+            trackerLogger.debug(`[TEMPORAL TRANSITION] ${jid}: Detected app going to background`);
+        }
+        // 8. Use absolute thresholds adjusted for network baseline
+        else if (currentRTT < thresholds.veryActive * MARGIN) {
+            newState = DeviceState.APP_FOREGROUND;
+        } else if (currentRTT < thresholds.screenOn * MARGIN) {
+            newState = DeviceState.APP_MINIMIZED;
+        } else if (currentRTT < thresholds.screenOff * MARGIN) {
+            newState = DeviceState.SCREEN_ON;
+        } else {
+            newState = DeviceState.SCREEN_OFF;
+        }
+
+        // 9. Apply hysteresis - only change state if enough time has passed
+        if (newState !== metrics.state && canChangeState) {
+            trackerLogger.debug(
+                `[STATE CHANGE] ${jid}: ${metrics.state} -> ${newState} ` +
+                `(RTT: ${currentRTT.toFixed(0)}ms, Thresholds - Active: ${thresholds.veryActive.toFixed(0)}ms, ` +
+                `Minimized: ${thresholds.minimized.toFixed(0)}ms, ScreenOn: ${thresholds.screenOn.toFixed(0)}ms, ` +
+                `ScreenOff: ${thresholds.screenOff.toFixed(0)}ms)`
+            );
+
+            // Record state change in history
+            metrics.stateHistory.push({
+                state: newState,
+                timestamp: Date.now(),
+                rtt: metrics.lastRtt
+            });
+
+            // Keep only last 1000 state changes
+            if (metrics.stateHistory.length > 1000) {
+                metrics.stateHistory.shift();
+            }
+
+            metrics.state = newState;
+            metrics.stateChangedAt = Date.now();
+        } else if (newState !== metrics.state) {
+            trackerLogger.debug(
+                `[HYSTERESIS] ${jid}: Delaying state change ${metrics.state} -> ${newState} ` +
+                `(${(MIN_STATE_DURATION - timeSinceStateChange) / 1000}s remaining)`
+            );
+        }
+
+        // 10. Output formatted status
+        const movingAvg = metrics.recentRtts.reduce((a, b) => a + b, 0) / metrics.recentRtts.length;
+        const globalMedian = this.calculateGlobalMedian();
+        const globalThreshold = globalMedian * 0.9;
+        trackerLogger.formatDeviceState(jid, metrics.lastRtt, movingAvg, globalMedian, globalThreshold, metrics.state);
 
         // Debug mode: Additional debug information
-        trackerLogger.debug(`[DEBUG] RTT History length: ${metrics.rttHistory.length}, Global History: ${this.globalRttHistory.length}`);
+        trackerLogger.debug(
+            `[ADVANCED METRICS] ${jid}: ` +
+            `EMA: ${metrics.ema.toFixed(0)}ms, ` +
+            `Network Baseline: ${metrics.calibration.networkBaseline.toFixed(0)}ms, ` +
+            `Adjusted Thresholds - Active: ${thresholds.veryActive.toFixed(0)}ms, ` +
+            `Minimized: ${thresholds.minimized.toFixed(0)}ms, ` +
+            `ScreenOn: ${thresholds.screenOn.toFixed(0)}ms, ` +
+            `ScreenOff: ${thresholds.screenOff.toFixed(0)}ms, ` +
+            `Temporal: ${metrics.temporalPattern.trendDirection}, ` +
+            `History: ${metrics.rttHistory.length}, ` +
+            `States recorded: ${metrics.stateHistory.length}`
+        );
     }
 
     /**
      * Send update to client with current tracking data
      */
     private sendUpdate() {
-        // Build devices array
+        // Build devices array with enhanced metrics
         const devices = Array.from(this.deviceMetrics.entries()).map(([jid, metrics]) => ({
             jid,
             state: metrics.state,
             rtt: metrics.lastRtt,
             avg: metrics.recentRtts.length > 0
                 ? metrics.recentRtts.reduce((a: number, b: number) => a + b, 0) / metrics.recentRtts.length
-                : 0
+                : 0,
+            ema: metrics.ema,
+            stateHistory: metrics.stateHistory,
+            percentiles: {
+                p25: metrics.baselineP25,
+                p50: metrics.baselineP50,
+                p75: metrics.baselineP75,
+                p90: metrics.baselineP90
+            },
+            historyLength: metrics.rttHistory.length,
+            rttHistory: metrics.rttHistory, // Send full RTT history for detailed charts
+            // Calibration data for UI progress indicator
+            calibration: {
+                isCalibrated: metrics.calibration.isCalibrated,
+                samplesCollected: metrics.calibration.samplesCollected,
+                requiredSamples: metrics.calibration.requiredSamples,
+                networkBaseline: metrics.calibration.networkBaseline
+            },
+            // Adjusted thresholds for debugging/display
+            adjustedThresholds: metrics.thresholds.adjusted
         }));
 
         // Calculate global stats for backward compatibility

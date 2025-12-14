@@ -4,7 +4,9 @@ import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
 
 // Create socket with autoConnect disabled so we can add listeners before connecting
-export const socket: Socket = io('http://localhost:3001', { autoConnect: false });
+// Use window.location.hostname to support both localhost and deployed environments (e.g. VM IP)
+const socketUrl = `http://${window.location.hostname}:3001`;
+export const socket: Socket = io(socketUrl, { autoConnect: false });
 
 export type Platform = 'whatsapp' | 'signal';
 
