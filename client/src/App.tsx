@@ -106,6 +106,7 @@ function App() {
             socket.off('signal-disconnected', onSignalDisconnected);
             socket.off('signal-api-status', onSignalApiStatus);
             socket.off('signal-qr-image', onSignalQrImage);
+            socket.disconnect();
         };
     }, []);
 

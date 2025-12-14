@@ -192,6 +192,9 @@ export class WhatsAppTracker {
     private sock: WASocket;
     private targetJid: string;
     private trackedJids: Set<string> = new Set(); // Multi-device support
+
+    private lidMap: Map<string, string> = new Map(); // Map LID -> Phone JID
+
     private isTracking: boolean = false;
     private deviceMetrics: Map<string, DeviceMetrics> = new Map();
     private globalRttHistory: number[] = []; // For threshold calculation
@@ -248,13 +251,21 @@ export class WhatsAppTracker {
 
             if (update.presences) {
                 for (const [jid, presenceData] of Object.entries(update.presences)) {
-                    if (presenceData && presenceData.lastKnownPresence) {
+                    if (presenceData) {
                         // Track multi-device JIDs (including LID)
                         this.trackedJids.add(jid);
                         trackerLogger.debug(`[MULTI-DEVICE] Added JID to tracking: ${jid}`);
+                        
+                        // Store LID mapping if applicable
+                        if (jid.includes('@lid')) {
+                            this.lidMap.set(jid, this.targetJid);
+                            trackerLogger.debug(`[LID MAPPING] Learned LID ${jid} for ${this.targetJid}`);
+                        }
 
-                        this.lastPresence = presenceData.lastKnownPresence;
-                        trackerLogger.debug(`[PRESENCE] Stored presence from ${jid}: ${this.lastPresence}`);
+                        if (presenceData.lastKnownPresence) {
+                            this.lastPresence = presenceData.lastKnownPresence;
+                            trackerLogger.debug(`[PRESENCE] Stored presence from ${jid}: ${this.lastPresence}`);
+                        }
                         break;
                     }
                 }
@@ -292,7 +303,16 @@ export class WhatsAppTracker {
             } catch (err) {
                 logger.error(err, 'Error sending probe');
             }
-            const delay = Math.floor(Math.random() * 100) + 2000;
+            
+            // Adaptive rate: Slow down if device is OFFLINE
+            let baseDelay = 2000;
+            const metrics = this.deviceMetrics.get(this.targetJid);
+            if (metrics && metrics.state === 'OFFLINE') {
+                baseDelay = 10000; // 10 seconds
+                trackerLogger.debug(`[ADAPTIVE] Device OFFLINE, slowing probe rate to ${baseDelay}ms`);
+            }
+
+            const delay = Math.floor(Math.random() * 100) + baseDelay;
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
@@ -426,29 +446,39 @@ export class WhatsAppTracker {
     private handleRawReceipt(node: any) {
         try {
             const { attrs } = node;
-            // We only care about 'inactive' receipts here
-            if (attrs.type === 'inactive') {
-                trackerLogger.debug(`[RAW RECEIPT] Received inactive receipt: ${JSON.stringify(attrs)}`);
+            
+            // LOG ALL RECEIPTS for debugging iOS behavior
+            trackerLogger.debug(`[RAW RECEIPT] Received receipt: ${JSON.stringify(attrs)}`);
 
-                const msgId = attrs.id;
-                const fromJid = attrs.from;
+            const msgId = attrs.id;
+            const fromJid = attrs.from;
 
-                // Guard against missing from attribute
-                if (!fromJid) {
-                    trackerLogger.debug('[RAW RECEIPT] Missing from JID in receipt');
-                    return;
+            if (!fromJid) return;
+
+            // Extract base number
+            const baseNumber = fromJid.split('@')[0].split(':')[0];
+
+            // Check if this matches our target
+            let isTracked = this.trackedJids.has(fromJid) ||
+                              this.trackedJids.has(`${baseNumber}@s.whatsapp.net`);
+
+            // Check LID mapping
+            if (!isTracked && fromJid.includes('@lid')) {
+                // Try to find if this LID maps to our target
+                if (this.lidMap.has(fromJid)) {
+                    isTracked = true;
+                    // Use the phone JID for processing
+                    const mappedJid = this.lidMap.get(fromJid);
+                    if (mappedJid) {
+                         this.processAck(msgId, mappedJid, attrs.type || 'unknown');
+                         return;
+                    }
                 }
+            }
 
-                // Extract base number from device JID (e.g., "15109129852:22@s.whatsapp.net" -> "15109129852")
-                const baseNumber = fromJid.split('@')[0].split(':')[0];
-
-                // Check if this matches our target (with or without device ID)
-                const isTracked = this.trackedJids.has(fromJid) ||
-                                  this.trackedJids.has(`${baseNumber}@s.whatsapp.net`);
-
-                if (isTracked) {
-                    this.processAck(msgId, fromJid, 'inactive');
-                }
+            if (isTracked) {
+                // Process ALL receipts for tracked devices
+                this.processAck(msgId, fromJid, attrs.type || 'unknown');
             }
         } catch (err) {
             trackerLogger.debug(`[RAW RECEIPT] Error handling receipt: ${err}`);
@@ -489,9 +519,16 @@ export class WhatsAppTracker {
     private analyzeUpdate(update: { key: proto.IMessageKey, update: Partial<proto.IWebMessageInfo> }) {
         const status = update.update.status;
         const msgId = update.key.id;
-        const fromJid = update.key.remoteJid;
+        let fromJid = update.key.remoteJid;
 
         if (!msgId || !fromJid) return;
+
+        // Map LID to Phone JID if possible
+        if (fromJid.includes('@lid') && this.lidMap.has(fromJid)) {
+            const mappedJid = this.lidMap.get(fromJid);
+            trackerLogger.debug(`[LID MAPPING] Mapped ${fromJid} -> ${mappedJid}`);
+            fromJid = mappedJid!;
+        }
 
         trackerLogger.debug(`[TRACKING] Message Update - ID: ${msgId}, JID: ${fromJid}, Status: ${status} (${this.getStatusName(status)})`);
 
