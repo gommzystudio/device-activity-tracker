@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License MIT"/>
 </p>
 
-> ⚠️ **DISCLAIMER**: Proof-of-concept for educational and security research purposes only. Demonstrates privacy vulnerabilities in WhatsApp and Signal.
+> **DISCLAIMER**: Proof-of-concept for educational and security research purposes only. Demonstrates privacy vulnerabilities in WhatsApp and Signal.
 
 ## Overview
 
@@ -68,7 +68,7 @@ Follow prompts to authenticate and enter target number.
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
-║ 🟡 Device Status Update - 09:41:51                             ║
+║ Device Status Update - 09:41:51                                ║
 ╠════════════════════════════════════════════════════════════════╣
 ║ JID:        ***********@lid                                    ║
 ║ Status:     Standby                                            ║
@@ -79,9 +79,9 @@ Follow prompts to authenticate and enter target number.
 ╚════════════════════════════════════════════════════════════════╝
 ```
 
-- **🟢 Online**: Device is actively being used (RTT below threshold)
-- **🟡 Standby**: Device is idle/locked (RTT above threshold)
-- **🔴 Offline**: Device is offline or unreachable (no CLIENT ACK received)
+- **Online**: Device is actively being used (RTT below threshold)
+- **Standby**: Device is idle/locked (RTT above threshold)
+- **Offline**: Device is offline or unreachable (no CLIENT ACK received)
 
 ## How It Works
 
@@ -131,7 +131,7 @@ Disabling read receipts helps with regular messages but does not protect against
 
 ## Ethical & Legal Considerations
 
-⚠️ For research and educational purposes only. Never track people without explicit consent - this may violate privacy laws. Authentication data (`auth_info_baileys/`) is stored locally and must never be committed to version control.
+For research and educational purposes only. Never track people without explicit consent - this may violate privacy laws. Authentication data (`auth_info_baileys/`) is stored locally and must never be committed to version control.
 
 ## Citation
 

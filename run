@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# Device Activity Tracker - Quick Start Script
+# Starts both backend and frontend servers
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}======================================${NC}"
+echo -e "${BLUE}Device Activity Tracker - Quick Start${NC}"
+echo -e "${BLUE}======================================${NC}\n"
+
+# Check if node_modules exists
+if [ ! -d "node_modules" ]; then
+    echo -e "${YELLOW}Installing dependencies...${NC}"
+    npm install
+    echo ""
+fi
+
+# Check if client/node_modules exists
+if [ ! -d "client/node_modules" ]; then
+    echo -e "${YELLOW}Installing client dependencies...${NC}"
+    cd client && npm install && cd ..
+    echo ""
+fi
+
+# Function to cleanup on exit
+cleanup() {
+    echo -e "\n${YELLOW}Shutting down servers...${NC}"
+    kill 0
+}
+
+trap cleanup EXIT INT TERM
+
+# Start Signal API Docker container (if needed)
+echo -e "${BLUE}Starting Signal API container...${NC}"
+docker start signal-api 2>/dev/null || docker run -d --name signal-api -p 8080:8080 -v $HOME/.local/share/signal-api:/home/.local/share/signal-cli -e MODE=json-rpc bbernhard/signal-cli-rest-api 2>/dev/null || echo -e "${YELLOW}Signal API container already running or not needed${NC}"
+echo ""
+
+# Start backend server
+echo -e "${GREEN}Starting backend server...${NC}"
+npx tsx src/server.ts &
+BACKEND_PID=$!
+
+# Wait a bit for backend to start
+sleep 3
+
+# Start frontend server
+echo -e "${GREEN}Starting frontend server...${NC}"
+cd client && npm start &
+FRONTEND_PID=$!
+
+echo ""
+echo -e "${GREEN}======================================${NC}"
+echo -e "${GREEN}Servers are starting...${NC}"
+echo -e "${GREEN}======================================${NC}"
+echo -e "${BLUE}Backend:${NC}  http://localhost:3001"
+echo -e "${BLUE}Frontend:${NC} http://localhost:3000"
+echo ""
+echo -e "${YELLOW}Press Ctrl+C to stop all servers${NC}\n"
+
+# Wait for all background processes
+wait

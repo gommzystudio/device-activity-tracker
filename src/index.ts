@@ -66,10 +66,10 @@ import { WhatsAppTracker } from './tracker.js';
 import * as readline from 'readline';
 
 if (debugMode) {
-    originalConsoleLog('🔍 Debug mode enabled\n');
+    originalConsoleLog('Debug mode enabled\n');
 } else {
-    originalConsoleLog('📊 Normal mode (important outputs only)\n');
-    originalConsoleLog('💡 Tip: Use --debug or -d for detailed debug output\n');
+    originalConsoleLog('Normal mode (important outputs only)\n');
+    originalConsoleLog('Tip: Use --debug or -d for detailed debug output\n');
 }
 
 let currentTargetJid: string | null = null;
@@ -84,7 +84,7 @@ async function connectToWhatsApp() {
         markOnlineOnConnect: true,
     });
 
-    originalConsoleLog('🔌 Connecting to WhatsApp... (use the --debug flag for more details)');
+    originalConsoleLog('Connecting to WhatsApp... (use the --debug flag for more details)');
 
     let isConnected = false;
 
@@ -111,7 +111,7 @@ async function connectToWhatsApp() {
                 connectToWhatsApp();
             }
         } else if (connection === 'open') {
-            originalConsoleLog('✅ Connected to WhatsApp');
+            originalConsoleLog('Connected to WhatsApp');
             isConnected = true;
 
             if (currentTargetJid) {
@@ -162,10 +162,10 @@ async function connectToWhatsApp() {
                     currentTargetJid = result.jid;
                     currentTracker = new WhatsAppTracker(sock, result.jid, debugMode);
                     currentTracker.startTracking();
-                    originalConsoleLog(`✅ Tracking started for ${result.jid}`);
+                    originalConsoleLog(`Tracking started for ${result.jid}`);
                     rl.close();
                 } else {
-                    originalConsoleLog('❌ Number not registered on WhatsApp.');
+                    originalConsoleLog('Number not registered on WhatsApp.');
                     rl.close();
                     askForTarget();
                 }

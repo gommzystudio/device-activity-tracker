@@ -1,0 +1,408 @@
+#!/bin/bash
+
+# Device Activity Tracker - macOS High Sierra Setup & Run Script
+# ================================================================
+# This script is designed for macOS High Sierra (10.13)
+# 
+# KNOWN COMPATIBILITY ISSUES:
+# ---------------------------
+# 1. Docker Desktop does NOT support High Sierra (requires 10.15+)
+#    - Signal tracking via Docker will NOT work
+#    - Only WhatsApp tracking (via Baileys) will be available
+#
+# 2. Homebrew may have limited support for High Sierra
+#    - Using older Homebrew version or manual installation as fallback
+#
+# 3. Node.js - Latest versions may not have prebuilt binaries
+#    - Will try to install via nvm with compilation fallback
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Configuration
+NODE_VERSION="18"  # Node 18 has better compatibility than 20 for older systems
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo -e "${CYAN}======================================================${NC}"
+echo -e "${CYAN}  Device Activity Tracker - macOS High Sierra Setup   ${NC}"
+echo -e "${CYAN}======================================================${NC}\n"
+
+# Function to print section headers
+print_section() {
+    echo -e "\n${BLUE}>>> $1${NC}"
+}
+
+# Function to print warnings
+print_warning() {
+    echo -e "${YELLOW}WARNING: $1${NC}"
+}
+
+# Function to print errors
+print_error() {
+    echo -e "${RED}ERROR: $1${NC}"
+}
+
+# Function to print success
+print_success() {
+    echo -e "${GREEN}SUCCESS: $1${NC}"
+}
+
+# Function to check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Detect macOS version
+detect_macos_version() {
+    print_section "Detecting macOS version..."
+    
+    if [[ "$(uname)" != "Darwin" ]]; then
+        print_error "This script is designed for macOS only!"
+        exit 1
+    fi
+    
+    MACOS_VERSION=$(sw_vers -productVersion)
+    MACOS_MAJOR=$(echo "$MACOS_VERSION" | cut -d. -f1)
+    MACOS_MINOR=$(echo "$MACOS_VERSION" | cut -d. -f2)
+    
+    echo "Detected macOS version: $MACOS_VERSION"
+    
+    if [[ "$MACOS_MAJOR" -eq 10 && "$MACOS_MINOR" -le 13 ]]; then
+        print_warning "macOS High Sierra or earlier detected!"
+        print_warning "Some features may have limited compatibility."
+        IS_HIGH_SIERRA=true
+    else
+        IS_HIGH_SIERRA=false
+    fi
+}
+
+# Install Xcode Command Line Tools
+install_xcode_tools() {
+    print_section "Checking Xcode Command Line Tools..."
+    
+    if xcode-select -p &>/dev/null; then
+        echo "Xcode Command Line Tools already installed"
+    else
+        echo "Installing Xcode Command Line Tools..."
+        echo "A dialog may appear - please click 'Install' and wait for completion"
+        xcode-select --install
+        
+        # Wait for installation
+        echo "Waiting for Xcode Command Line Tools installation..."
+        until xcode-select -p &>/dev/null; do
+            sleep 5
+        done
+        print_success "Xcode Command Line Tools installed"
+    fi
+}
+
+# Install Homebrew
+install_homebrew() {
+    print_section "Checking Homebrew..."
+    
+    if command_exists brew; then
+        echo "Homebrew already installed: $(brew --version | head -n1)"
+        
+        # Update Homebrew
+        echo "Updating Homebrew..."
+        brew update || print_warning "Homebrew update failed, continuing anyway..."
+    else
+        echo "Installing Homebrew..."
+        
+        if [[ "$IS_HIGH_SIERRA" == true ]]; then
+            print_warning "Installing Homebrew on High Sierra may require older version"
+        fi
+        
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        
+        # Add Homebrew to PATH for this session
+        if [[ -f /opt/homebrew/bin/brew ]]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+        elif [[ -f /usr/local/bin/brew ]]; then
+            eval "$(/usr/local/bin/brew shellenv)"
+        fi
+        
+        print_success "Homebrew installed"
+    fi
+}
+
+# Install Node.js via nvm (better compatibility for older macOS)
+install_nodejs() {
+    print_section "Checking Node.js..."
+    
+    # Check if nvm is installed
+    export NVM_DIR="$HOME/.nvm"
+    
+    if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+        source "$NVM_DIR/nvm.sh"
+        echo "nvm already installed"
+    else
+        echo "Installing nvm (Node Version Manager)..."
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+        
+        # Load nvm
+        export NVM_DIR="$HOME/.nvm"
+        source "$NVM_DIR/nvm.sh"
+        
+        print_success "nvm installed"
+    fi
+    
+    # Install Node.js
+    if command_exists node; then
+        CURRENT_NODE=$(node --version)
+        echo "Node.js already installed: $CURRENT_NODE"
+        
+        # Check if version is adequate (18+)
+        NODE_MAJOR=$(echo "$CURRENT_NODE" | sed 's/v//' | cut -d. -f1)
+        if [[ "$NODE_MAJOR" -lt 18 ]]; then
+            print_warning "Node.js version too old. Installing Node.js $NODE_VERSION..."
+            nvm install $NODE_VERSION
+            nvm use $NODE_VERSION
+        fi
+    else
+        echo "Installing Node.js $NODE_VERSION..."
+        
+        if [[ "$IS_HIGH_SIERRA" == true ]]; then
+            print_warning "On High Sierra, Node.js may need to compile from source"
+            print_warning "This could take 10-20 minutes..."
+        fi
+        
+        # Try to install, may compile from source on old macOS
+        nvm install $NODE_VERSION || {
+            print_error "Failed to install Node.js $NODE_VERSION"
+            print_warning "Trying Node.js 16 as fallback..."
+            nvm install 16
+        }
+        
+        nvm use $NODE_VERSION 2>/dev/null || nvm use 16
+    fi
+    
+    echo "Node.js version: $(node --version)"
+    echo "npm version: $(npm --version)"
+    print_success "Node.js ready"
+}
+
+# Install Git
+install_git() {
+    print_section "Checking Git..."
+    
+    if command_exists git; then
+        echo "Git already installed: $(git --version)"
+    else
+        echo "Installing Git via Homebrew..."
+        brew install git
+        print_success "Git installed"
+    fi
+}
+
+# Docker warning for High Sierra
+docker_warning() {
+    print_section "Docker Compatibility Check..."
+    
+    if [[ "$IS_HIGH_SIERRA" == true ]]; then
+        echo ""
+        print_warning "=============================================="
+        print_warning "Docker Desktop is NOT compatible with High Sierra!"
+        print_warning "Docker requires macOS 10.15 (Catalina) or later."
+        print_warning "=============================================="
+        echo ""
+        print_warning "This means Signal tracking will NOT work."
+        print_warning "Only WhatsApp tracking (via Baileys) is available."
+        echo ""
+        read -p "Press Enter to continue with WhatsApp-only mode..."
+        DOCKER_AVAILABLE=false
+    else
+        if command_exists docker; then
+            echo "Docker is available"
+            DOCKER_AVAILABLE=true
+        else
+            print_warning "Docker not installed. Signal tracking won't be available."
+            DOCKER_AVAILABLE=false
+        fi
+    fi
+}
+
+# Install project dependencies
+install_dependencies() {
+    print_section "Installing project dependencies..."
+    
+    cd "$PROJECT_DIR"
+    
+    # Check if package.json exists
+    if [[ ! -f "package.json" ]]; then
+        print_error "package.json not found in $PROJECT_DIR"
+        exit 1
+    fi
+    
+    # Install root dependencies
+    echo "Installing backend dependencies..."
+    npm install
+    
+    # Install client dependencies
+    if [[ -d "client" && -f "client/package.json" ]]; then
+        echo "Installing frontend dependencies..."
+        cd client
+        npm install
+        cd ..
+    fi
+    
+    print_success "Dependencies installed"
+}
+
+# Build the project
+build_project() {
+    print_section "Building project..."
+    
+    cd "$PROJECT_DIR"
+    
+    # Compile TypeScript if tsconfig exists
+    if [[ -f "tsconfig.json" ]]; then
+        echo "Compiling TypeScript..."
+        npm run build 2>/dev/null || npx tsc 2>/dev/null || echo "TypeScript compilation skipped"
+    fi
+    
+    print_success "Build complete"
+}
+
+# Run the application
+run_application() {
+    print_section "Starting Application..."
+    
+    cd "$PROJECT_DIR"
+    
+    echo ""
+    echo -e "${GREEN}======================================${NC}"
+    echo -e "${GREEN}   Starting Device Activity Tracker   ${NC}"
+    echo -e "${GREEN}======================================${NC}"
+    echo ""
+    
+    if [[ "$DOCKER_AVAILABLE" == false ]]; then
+        echo -e "${YELLOW}Running in WhatsApp-only mode (no Signal support)${NC}"
+        echo ""
+    fi
+    
+    # Function to cleanup on exit
+    cleanup() {
+        echo -e "\n${YELLOW}Shutting down servers...${NC}"
+        kill 0 2>/dev/null
+    }
+    
+    trap cleanup EXIT INT TERM
+    
+    # Start backend server
+    echo -e "${GREEN}Starting backend server...${NC}"
+    npx tsx src/server.ts &
+    BACKEND_PID=$!
+    
+    # Wait for backend to start
+    sleep 3
+    
+    # Start frontend
+    if [[ -d "client" ]]; then
+        echo -e "${GREEN}Starting frontend server...${NC}"
+        cd client
+        npm start &
+        FRONTEND_PID=$!
+        cd ..
+    fi
+    
+    echo ""
+    echo -e "${GREEN}======================================${NC}"
+    echo -e "${GREEN}         Servers are running          ${NC}"
+    echo -e "${GREEN}======================================${NC}"
+    echo ""
+    echo -e "${BLUE}Backend:${NC}  http://localhost:3001"
+    echo -e "${BLUE}Frontend:${NC} http://localhost:3000"
+    echo ""
+    echo -e "${YELLOW}Press Ctrl+C to stop all servers${NC}"
+    echo ""
+    
+    # Wait for all processes
+    wait
+}
+
+# Main setup and run function
+main() {
+    echo "Starting setup at $(date)"
+    echo ""
+    
+    # Check if this is just a run (dependencies already installed)
+    if [[ "$1" == "--run-only" ]] || [[ "$1" == "-r" ]]; then
+        print_section "Running application (skip setup)..."
+        
+        # Load nvm
+        export NVM_DIR="$HOME/.nvm"
+        [[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
+        
+        detect_macos_version
+        docker_warning
+        run_application
+        exit 0
+    fi
+    
+    # Full setup
+    detect_macos_version
+    install_xcode_tools
+    install_homebrew
+    install_nodejs
+    install_git
+    docker_warning
+    install_dependencies
+    build_project
+    
+    echo ""
+    print_success "Setup complete!"
+    echo ""
+    echo "To run the application in the future, use:"
+    echo "  ./run-macos-high-sierra --run-only"
+    echo ""
+    
+    read -p "Would you like to start the application now? (y/n) " -n 1 -r
+    echo
+    
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        run_application
+    else
+        echo "Setup complete. Run './run-macos-high-sierra --run-only' to start."
+    fi
+}
+
+# Display help
+show_help() {
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --run-only, -r    Skip setup and run the application directly"
+    echo "  --help, -h        Show this help message"
+    echo ""
+    echo "First run: $0"
+    echo "  - Installs all dependencies (Xcode tools, Homebrew, Node.js)"
+    echo "  - Sets up the project"
+    echo "  - Optionally starts the application"
+    echo ""
+    echo "Subsequent runs: $0 --run-only"
+    echo "  - Starts the application without reinstalling dependencies"
+    echo ""
+    echo "NOTES for macOS High Sierra:"
+    echo "  - Docker is NOT supported (requires macOS 10.15+)"
+    echo "  - Signal tracking will NOT work"
+    echo "  - Only WhatsApp tracking is available"
+}
+
+# Parse arguments
+case "$1" in
+    --help|-h)
+        show_help
+        exit 0
+        ;;
+    *)
+        main "$@"
+        ;;
+esac
