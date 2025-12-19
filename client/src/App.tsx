@@ -4,7 +4,8 @@ import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
 
 // Create socket with autoConnect disabled so we can add listeners before connecting
-export const socket: Socket = io('http://localhost:3001', { autoConnect: false });
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+export const socket: Socket = io(API_URL, { autoConnect: false });
 
 export type Platform = 'whatsapp' | 'signal';
 

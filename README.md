@@ -44,7 +44,34 @@ cd client && npm install && cd ..
 
 ## Usage
 
-### Web Interface (Recommended)
+### Docker (Recommended)
+
+The easiest way to run the application is using Docker:
+
+```bash
+# Copy environment template
+cp .env.example .env
+
+# (Optional) Customize ports in .env file
+# BACKEND_PORT=3001
+# CLIENT_PORT=3000
+
+# Build and start containers
+docker compose up --build
+```
+
+The application will be available at:
+- Frontend: `http://localhost:3000` (or your configured `CLIENT_PORT`)
+- Backend: `http://localhost:3001` (or your configured `BACKEND_PORT`)
+
+To stop the containers:
+```bash
+docker compose down
+```
+
+### Manual Setup
+
+#### Web Interface
 
 ```bash
 # Terminal 1: Start backend
