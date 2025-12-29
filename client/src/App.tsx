@@ -108,33 +108,52 @@ function App() {
     }, []);
 
     return (
-        <div className="min-h-screen bg-gray-100 p-8">
-            <div className="max-w-6xl mx-auto">
-                <header className="mb-8 flex justify-between items-center">
-                    <h1 className="text-3xl font-bold text-gray-900">Activity Tracker</h1>
-                    <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-                        <span className="text-sm text-gray-600">{isConnected ? 'Server Connected' : 'Disconnected'}</span>
-                        {isConnected && (
-                            <>
-                                <div className="w-px h-4 bg-gray-300 mx-2" />
-                                <div className={`w-3 h-3 rounded-full ${connectionState.whatsapp ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                                <span className="text-sm text-gray-600">WhatsApp</span>
-                                <div className="w-px h-4 bg-gray-300 mx-2" />
-                                <div className={`w-3 h-3 rounded-full ${connectionState.signal ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                                <span className="text-sm text-gray-600">Signal</span>
-                            </>
-                        )}
-                    </div>
-                </header>
+        <div className="min-h-screen app-shell text-slate-900">
+            <div className="relative overflow-hidden">
+                <div className="pointer-events-none absolute -top-24 -left-10 h-72 w-72 rounded-full bg-[#e07a4f]/20 blur-3xl animate-float" />
+                <div className="pointer-events-none absolute -top-32 right-[-4rem] h-80 w-80 rounded-full bg-[#0f766e]/20 blur-3xl animate-float" style={{ animationDelay: '2s' }} />
+                <div className="relative max-w-6xl mx-auto px-6 py-10 lg:px-10">
+                    <header className="mb-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between animate-rise">
+                        <div>
+                            <span className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-[#c7784c]">
+                                Presence Lab
+                            </span>
+                            <h1 className="text-4xl md:text-5xl font-semibold text-[#1b1b1f]">Activity Tracker</h1>
+                            <p className="mt-3 max-w-xl text-sm text-slate-600">
+                                Monitor multi-device presence signals with clean history controls and readable state timelines.
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="glass-panel rounded-full px-4 py-2 shadow-sm flex items-center gap-3">
+                                <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-rose-400'}`} />
+                                <span className="text-xs uppercase tracking-[0.2em] text-slate-500">Server</span>
+                                <span className="text-sm text-slate-700">{isConnected ? 'Connected' : 'Disconnected'}</span>
+                            </div>
+                            {isConnected && (
+                                <>
+                                    <div className="glass-panel rounded-full px-4 py-2 shadow-sm flex items-center gap-3">
+                                        <div className={`w-2.5 h-2.5 rounded-full ${connectionState.whatsapp ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                                        <span className="text-xs uppercase tracking-[0.2em] text-slate-500">WhatsApp</span>
+                                        <span className="text-sm text-slate-700">{connectionState.whatsapp ? 'Online' : 'Idle'}</span>
+                                    </div>
+                                    <div className="glass-panel rounded-full px-4 py-2 shadow-sm flex items-center gap-3">
+                                        <div className={`w-2.5 h-2.5 rounded-full ${connectionState.signal ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                                        <span className="text-xs uppercase tracking-[0.2em] text-slate-500">Signal</span>
+                                        <span className="text-sm text-slate-700">{connectionState.signal ? 'Online' : 'Idle'}</span>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </header>
 
-                <main>
-                    {!isAnyPlatformReady ? (
-                        <Login connectionState={connectionState} />
-                    ) : (
-                        <Dashboard connectionState={connectionState} />
-                    )}
-                </main>
+                    <main className="animate-rise">
+                        {!isAnyPlatformReady ? (
+                            <Login connectionState={connectionState} />
+                        ) : (
+                            <Dashboard connectionState={connectionState} />
+                        )}
+                    </main>
+                </div>
             </div>
         </div>
     );

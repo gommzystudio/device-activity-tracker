@@ -65,6 +65,7 @@ export class SignalTracker {
     private senderNumber: string;
     private targetNumber: string;
     private isTracking: boolean = false;
+    private isPaused: boolean = false;
     private deviceMetrics: Map<string, DeviceMetrics> = new Map();
     private globalRttHistory: number[] = [];
     private probeMethod: ProbeMethod = 'reaction';
@@ -105,6 +106,7 @@ export class SignalTracker {
     public async startTracking() {
         if (this.isTracking) return;
         this.isTracking = true;
+        this.isPaused = false;
         logger.info(`Tracking started for ${this.targetNumber}`);
         logger.info(`Probe method: ${this.probeMethod}`);
 
@@ -181,6 +183,7 @@ export class SignalTracker {
     }
 
     private processJsonRpcMessage(message: any) {
+        if (this.isPaused) return;
         // Handle both JSON-RPC format and direct envelope format
         let envelope = message.params?.envelope || message.envelope;
 
@@ -224,6 +227,10 @@ export class SignalTracker {
 
     private async probeLoop() {
         while (this.isTracking) {
+            if (this.isPaused) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue;
+            }
             try {
                 // Serialized probing: wait for previous probe to complete before sending next
                 await this.sendSerializedProbe();
@@ -242,8 +249,19 @@ export class SignalTracker {
      */
     private async sendSerializedProbe(): Promise<void> {
         return new Promise<void>(async (resolve) => {
+            if (this.isPaused || !this.isTracking) {
+                resolve();
+                return;
+            }
+
             // Store resolve function so receipt handler can signal completion
             this.probeResolve = resolve;
+
+            if (this.isPaused || !this.isTracking) {
+                this.probeResolve = null;
+                resolve();
+                return;
+            }
 
             // Record probe start time
             this.pendingProbeStartTime = Date.now();
@@ -269,6 +287,7 @@ export class SignalTracker {
     }
 
     private async sendProbe() {
+        if (this.isPaused) return;
         if (this.probeMethod === 'reaction') {
             await this.sendReactionProbe();
         } else {
@@ -336,6 +355,7 @@ export class SignalTracker {
     }
 
     private markDeviceOffline(identifier: string, timeout: number) {
+        if (this.isPaused) return;
         if (!this.deviceMetrics.has(identifier)) {
             this.deviceMetrics.set(identifier, {
                 rttHistory: [],
@@ -356,6 +376,7 @@ export class SignalTracker {
     }
 
     private addMeasurementForDevice(identifier: string, rtt: number) {
+        if (this.isPaused) return;
         if (!this.deviceMetrics.has(identifier)) {
             this.deviceMetrics.set(identifier, {
                 rttHistory: [],
@@ -468,6 +489,7 @@ export class SignalTracker {
      */
     public stopTracking() {
         this.isTracking = false;
+        this.isPaused = false;
 
         if (this.ws) {
             this.ws.close();
@@ -491,6 +513,29 @@ export class SignalTracker {
         }
 
         logger.info('Tracking stopped');
+    }
+
+    public pauseTracking() {
+        if (!this.isTracking || this.isPaused) return;
+        this.isPaused = true;
+
+        if (this.pendingProbeTimeout) {
+            clearTimeout(this.pendingProbeTimeout);
+            this.pendingProbeTimeout = null;
+        }
+        this.pendingProbeStartTime = null;
+        if (this.probeResolve) {
+            this.probeResolve();
+            this.probeResolve = null;
+        }
+
+        logger.info('Tracking paused');
+    }
+
+    public resumeTracking() {
+        if (!this.isTracking || !this.isPaused) return;
+        this.isPaused = false;
+        logger.info('Tracking resumed');
     }
 }
 
