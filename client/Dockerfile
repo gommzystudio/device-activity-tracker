@@ -35,6 +35,12 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Copy built app
 COPY --from=build /app/build /usr/share/nginx/html
 
+# Adjust permissions for nginx user
+RUN touch /var/run/nginx.pid && \
+    chown -R nginx:nginx /var/run/nginx.pid /usr/share/nginx/html /var/cache/nginx /var/log/nginx /etc/nginx/conf.d
+
+USER nginx
+
 # Expose port
 ARG PORT=3000
 ENV PORT=${PORT}
