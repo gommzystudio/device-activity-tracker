@@ -88,8 +88,8 @@ async function connectToWhatsApp() {
 
     let isConnected = false;
 
-    sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update;
+    sock.ev.on('connection.update', async (update: any) => {
+        const { connection, lastDisconnect, qr } = update as any;
 
         if (qr) {
             qrcode.generate(qr, { small: true });
@@ -132,15 +132,15 @@ async function connectToWhatsApp() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    const askForTarget = () => {
+        const askForTarget = () => {
         const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout
         });
 
-        rl.question('Enter target phone number (with country code, e.g., 491701234567): ', async (number) => {
+        rl.question('Enter target phone number (with country code, e.g., 491701234567): ', async (phoneNumber: string) => {
             // Basic cleanup
-            const cleanNumber = number.replace(/\D/g, '');
+            const cleanNumber = phoneNumber.replace(/\D/g, '');
 
             if (cleanNumber.length < 10) {
                 originalConsoleLog('Invalid number format. Please try again.');
