@@ -44,6 +44,7 @@ type Platform = 'whatsapp' | 'signal';
 interface TrackerEntry {
     tracker: WhatsAppTracker | SignalTracker;
     platform: Platform;
+    paused: boolean;
 }
 
 const trackers: Map<string, TrackerEntry> = new Map(); // JID/Number -> Tracker entry
@@ -256,14 +257,16 @@ io.on('connection', (socket) => {
     // Send tracked contacts with platform info
     const trackedContacts = Array.from(trackers.entries()).map(([id, entry]) => ({
         id,
-        platform: entry.platform
+        platform: entry.platform,
+        paused: entry.paused
     }));
 
     // Handle request to get tracked contacts (for page refresh)
     socket.on('get-tracked-contacts', () => {
         const trackedContacts = Array.from(trackers.entries()).map(([id, entry]) => ({
             id,
-            platform: entry.platform
+            platform: entry.platform,
+            paused: entry.paused
         }));
         socket.emit('tracked-contacts', trackedContacts);
     });
@@ -310,7 +313,7 @@ io.on('connection', (socket) => {
                 console.log(`[SIGNAL] Number ${targetNumber} is registered, starting tracking...`);
                 const tracker = new SignalTracker(SIGNAL_API_URL, signalAccountNumber, targetNumber);
 
-                trackers.set(signalId, { tracker, platform: 'signal' });
+                trackers.set(signalId, { tracker, platform: 'signal', paused: false });
 
                 tracker.onUpdate = (updateData) => {
                     io.emit('tracker-update', {
@@ -349,7 +352,7 @@ io.on('connection', (socket) => {
                 if (result?.exists) {
                     const tracker = new WhatsAppTracker(sock, result.jid);
                     tracker.setProbeMethod(globalProbeMethod);
-                    trackers.set(result.jid, { tracker, platform: 'whatsapp' });
+                    trackers.set(result.jid, { tracker, platform: 'whatsapp', paused: false });
 
                     tracker.onUpdate = (updateData) => {
                         io.emit('tracker-update', {
@@ -392,13 +395,43 @@ io.on('connection', (socket) => {
     });
 
     socket.on('remove-contact', (jid: string) => {
-        console.log(`Request to stop tracking: ${jid}`);
+        console.log(`Request to delete tracking: ${jid}`);
         const entry = trackers.get(jid);
         if (entry) {
             entry.tracker.stopTracking();
             trackers.delete(jid);
             socket.emit('contact-removed', jid);
         }
+    });
+
+    socket.on('delete-contact', (jid: string) => {
+        console.log(`Request to delete tracking: ${jid}`);
+        const entry = trackers.get(jid);
+        if (entry) {
+            entry.tracker.stopTracking();
+            trackers.delete(jid);
+            socket.emit('contact-removed', jid);
+        }
+    });
+
+    socket.on('pause-contact', (jid: string) => {
+        const entry = trackers.get(jid);
+        if (!entry || entry.paused) return;
+        entry.paused = true;
+        if ('pauseTracking' in entry.tracker) {
+            (entry.tracker as WhatsAppTracker | SignalTracker).pauseTracking();
+        }
+        io.emit('tracking-state', { jid, paused: true });
+    });
+
+    socket.on('resume-contact', (jid: string) => {
+        const entry = trackers.get(jid);
+        if (!entry || !entry.paused) return;
+        entry.paused = false;
+        if ('resumeTracking' in entry.tracker) {
+            (entry.tracker as WhatsAppTracker | SignalTracker).resumeTracking();
+        }
+        io.emit('tracking-state', { jid, paused: false });
     });
 
     socket.on('set-probe-method', (method: ProbeMethod) => {

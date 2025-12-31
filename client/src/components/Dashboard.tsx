@@ -36,6 +36,7 @@ interface ContactInfo {
     presence: string | null;
     profilePic: string | null;
     platform: Platform;
+    paused: boolean;
 }
 
 export function Dashboard({ connectionState }: DashboardProps) {
@@ -79,7 +80,10 @@ export function Dashboard({ connectionState }: DashboardProps) {
                             avg: data.devices[0].avg,
                             median: data.median,
                             threshold: data.threshold,
-                            state: data.devices.find((d: DeviceInfo) => d.state.includes('Online'))?.state || data.devices[0].state,
+                            state: data.devices.find((d: DeviceInfo) => d.state.includes('Online'))?.state ||
+                                data.devices.find((d: DeviceInfo) => d.state.includes('Standby'))?.state ||
+                                data.devices.find((d: DeviceInfo) => d.state === 'OFFLINE')?.state ||
+                                data.devices[0].state,
                             timestamp: Date.now(),
                         };
                         updatedContact.data = [...updatedContact.data, newDataPoint];
@@ -126,7 +130,8 @@ export function Dashboard({ connectionState }: DashboardProps) {
                     deviceCount: 0,
                     presence: null,
                     profilePic: null,
-                    platform: data.platform || 'whatsapp'
+                    platform: data.platform || 'whatsapp',
+                    paused: false
                 });
                 return next;
             });
@@ -150,10 +155,10 @@ export function Dashboard({ connectionState }: DashboardProps) {
             setProbeMethod(method);
         }
 
-        function onTrackedContacts(contacts: { id: string, platform: Platform }[]) {
+        function onTrackedContacts(contacts: { id: string, platform: Platform, paused?: boolean }[]) {
             setContacts(prev => {
                 const next = new Map(prev);
-                contacts.forEach(({ id, platform }) => {
+                contacts.forEach(({ id, platform, paused }) => {
                     if (!next.has(id)) {
                         // Extract display number from id
                         let displayNumber = id;
@@ -172,10 +177,27 @@ export function Dashboard({ connectionState }: DashboardProps) {
                             deviceCount: 0,
                             presence: null,
                             profilePic: null,
-                            platform
+                            platform,
+                            paused: paused ?? false
                         });
+                    } else if (paused !== undefined) {
+                        const contact = next.get(id);
+                        if (contact) {
+                            next.set(id, { ...contact, paused });
+                        }
                     }
                 });
+                return next;
+            });
+        }
+
+        function onTrackingState(data: { jid: string, paused: boolean }) {
+            setContacts(prev => {
+                const next = new Map(prev);
+                const contact = next.get(data.jid);
+                if (contact) {
+                    next.set(data.jid, { ...contact, paused: data.paused });
+                }
                 return next;
             });
         }
@@ -188,6 +210,7 @@ export function Dashboard({ connectionState }: DashboardProps) {
         socket.on('error', onError);
         socket.on('probe-method', onProbeMethod);
         socket.on('tracked-contacts', onTrackedContacts);
+        socket.on('tracking-state', onTrackingState);
 
         // Request tracked contacts after listeners are set up
         socket.emit('get-tracked-contacts');
@@ -201,6 +224,7 @@ export function Dashboard({ connectionState }: DashboardProps) {
             socket.off('error', onError);
             socket.off('probe-method', onProbeMethod);
             socket.off('tracked-contacts', onTrackedContacts);
+            socket.off('tracking-state', onTrackingState);
         };
     }, []);
 
@@ -209,8 +233,16 @@ export function Dashboard({ connectionState }: DashboardProps) {
         socket.emit('add-contact', { number: inputNumber, platform: selectedPlatform });
     };
 
-    const handleRemove = (jid: string) => {
-        socket.emit('remove-contact', jid);
+    const handlePause = (jid: string) => {
+        socket.emit('pause-contact', jid);
+    };
+
+    const handleResume = (jid: string) => {
+        socket.emit('resume-contact', jid);
+    };
+
+    const handleDelete = (jid: string) => {
+        socket.emit('delete-contact', jid);
     };
 
     const handleProbeMethodChange = (method: ProbeMethod) => {
@@ -218,19 +250,19 @@ export function Dashboard({ connectionState }: DashboardProps) {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
             {/* Add Contact Form */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                <div className="flex justify-between items-center mb-4">
+            <div className="glass-panel p-6 rounded-2xl shadow-[0_24px_60px_-40px_rgba(15,23,42,0.35)]">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4">
                     <div className="flex items-center gap-4">
-                        <h2 className="text-xl font-semibold text-gray-900">Track Contacts</h2>
+                        <h2 className="text-2xl font-semibold text-slate-900">Track Contacts</h2>
                         {/* Manage Connections button */}
                         <button
                             onClick={() => setShowConnections(!showConnections)}
-                            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-1 ${
+                            className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors flex items-center gap-1 ${
                                 showConnections
-                                    ? 'bg-gray-700 text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    ? 'bg-[#0f766e] text-white shadow-sm'
+                                    : 'bg-white/70 text-slate-600 hover:bg-white'
                             }`}
                         >
                             <Settings size={14} />
@@ -240,14 +272,14 @@ export function Dashboard({ connectionState }: DashboardProps) {
                     <div className="flex items-center gap-4">
                         {/* Probe Method Toggle */}
                         <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-600">Probe Method:</span>
-                            <div className="flex rounded-lg overflow-hidden border border-gray-300">
+                            <span className="text-sm text-slate-600">Probe Method:</span>
+                            <div className="flex rounded-full overflow-hidden border border-[#e6dfd3] bg-white/70">
                                 <button
                                     onClick={() => handleProbeMethodChange('delete')}
                                     className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 flex items-center gap-1 ${
                                         probeMethod === 'delete'
-                                            ? 'bg-purple-600 text-white'
-                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            ? 'bg-[#0f766e] text-white shadow-sm'
+                                            : 'text-slate-600 hover:bg-white'
                                     }`}
                                     title="Silent Delete Probe - Completely covert, target sees nothing"
                                 >
@@ -258,8 +290,8 @@ export function Dashboard({ connectionState }: DashboardProps) {
                                     onClick={() => handleProbeMethodChange('reaction')}
                                     className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 flex items-center gap-1 ${
                                         probeMethod === 'reaction'
-                                            ? 'bg-yellow-500 text-white'
-                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            ? 'bg-[#e07a4f] text-white shadow-sm'
+                                            : 'text-slate-600 hover:bg-white'
                                     }`}
                                     title="Reaction Probe - Sends reactions to non-existent messages"
                                 >
@@ -271,10 +303,10 @@ export function Dashboard({ connectionState }: DashboardProps) {
                         {/* Privacy Mode Toggle */}
                         <button
                             onClick={() => setPrivacyMode(!privacyMode)}
-                            className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-all duration-200 ${
+                            className={`px-4 py-2 rounded-full flex items-center gap-2 font-medium transition-all duration-200 ${
                                 privacyMode 
-                                    ? 'bg-green-600 text-white hover:bg-green-700 shadow-md' 
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                    ? 'bg-[#1f4b48] text-white shadow-md' 
+                                    : 'bg-white/70 text-slate-600 hover:bg-white'
                             }`}
                             title={privacyMode ? 'Privacy Mode: ON (Click to disable)' : 'Privacy Mode: OFF (Click to enable)'}
                         >
@@ -292,18 +324,18 @@ export function Dashboard({ connectionState }: DashboardProps) {
                         </button>
                     </div>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex flex-col gap-4 md:flex-row">
                     {/* Platform Selector */}
-                    <div className="flex rounded-lg overflow-hidden border border-gray-300">
+                    <div className="flex rounded-full overflow-hidden border border-[#e6dfd3] bg-white/70">
                         <button
                             onClick={() => setSelectedPlatform('whatsapp')}
                             disabled={!connectionState.whatsapp}
                             className={`px-4 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
                                 selectedPlatform === 'whatsapp'
-                                    ? 'bg-green-600 text-white'
+                                    ? 'bg-[#1f7a4f] text-white'
                                     : connectionState.whatsapp
-                                        ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                        ? 'text-slate-600 hover:bg-white'
+                                        : 'text-slate-400 cursor-not-allowed'
                             }`}
                             title={connectionState.whatsapp ? 'WhatsApp' : 'WhatsApp not connected'}
                         >
@@ -315,10 +347,10 @@ export function Dashboard({ connectionState }: DashboardProps) {
                             disabled={!connectionState.signal}
                             className={`px-4 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
                                 selectedPlatform === 'signal'
-                                    ? 'bg-blue-600 text-white'
+                                    ? 'bg-[#2563eb] text-white'
                                     : connectionState.signal
-                                        ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                        ? 'text-slate-600 hover:bg-white'
+                                        : 'text-slate-400 cursor-not-allowed'
                             }`}
                             title={connectionState.signal ? 'Signal' : 'Signal not connected'}
                         >
@@ -329,19 +361,19 @@ export function Dashboard({ connectionState }: DashboardProps) {
                     <input
                         type="text"
                         placeholder="Enter phone number (e.g. 491701234567)"
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        className="flex-1 px-4 py-2 rounded-xl border border-[#e6dfd3] bg-white/80 text-slate-800 shadow-sm focus:ring-2 focus:ring-[#e07a4f]/40 focus:border-[#e07a4f] outline-none"
                         value={inputNumber}
                         onChange={(e) => setInputNumber(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && handleAdd()}
                     />
                     <button
                         onClick={handleAdd}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium transition-colors"
+                        className="px-6 py-2 bg-[#0f766e] text-white rounded-xl hover:bg-[#0b5f58] flex items-center gap-2 font-medium transition-colors shadow-sm"
                     >
                         <Plus size={20} /> Add Contact
                     </button>
                 </div>
-                {error && <p className="mt-2 text-red-500 text-sm">{error}</p>}
+                {error && <p className="mt-2 text-rose-500 text-sm">{error}</p>}
             </div>
 
             {/* Connections Panel */}
@@ -351,12 +383,12 @@ export function Dashboard({ connectionState }: DashboardProps) {
 
             {/* Contact Cards */}
             {contacts.size === 0 ? (
-                <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-12 text-center">
-                    <p className="text-gray-500 text-lg">No contacts being tracked</p>
-                    <p className="text-gray-400 text-sm mt-2">Add a contact above to start tracking</p>
+                <div className="bg-white/60 border border-dashed border-[#e5d5c3] rounded-2xl p-12 text-center shadow-sm">
+                    <p className="text-slate-600 text-lg">No contacts being tracked</p>
+                    <p className="text-slate-500 text-sm mt-2">Add a contact above to start tracking</p>
                 </div>
             ) : (
-                <div className="space-y-6">
+                <div className="space-y-8">
                     {Array.from(contacts.values()).map(contact => (
                         <ContactCard
                             key={contact.jid}
@@ -367,7 +399,10 @@ export function Dashboard({ connectionState }: DashboardProps) {
                             deviceCount={contact.deviceCount}
                             presence={contact.presence}
                             profilePic={contact.profilePic}
-                            onRemove={() => handleRemove(contact.jid)}
+                            paused={contact.paused}
+                            onPause={() => handlePause(contact.jid)}
+                            onResume={() => handleResume(contact.jid)}
+                            onDelete={() => handleDelete(contact.jid)}
                             privacyMode={privacyMode}
                             platform={contact.platform}
                         />

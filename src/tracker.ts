@@ -98,6 +98,7 @@ export class WhatsAppTracker {
     private targetJid: string;
     private trackedJids: Set<string> = new Set(); // Multi-device support
     private isTracking: boolean = false;
+    private isPaused: boolean = false;
     private deviceMetrics: Map<string, DeviceMetrics> = new Map();
     private globalRttHistory: number[] = []; // For threshold calculation
     private probeStartTimes: Map<string, number> = new Map();
@@ -129,6 +130,7 @@ export class WhatsAppTracker {
     public async startTracking() {
         if (this.isTracking) return;
         this.isTracking = true;
+        this.isPaused = false;
         trackerLogger.info(`\n✅ Tracking started for ${this.targetJid}`);
         trackerLogger.info(`Probe method: ${this.probeMethod === 'delete' ? 'Silent Delete (covert)' : 'Reaction'}\n`);
 
@@ -192,6 +194,10 @@ export class WhatsAppTracker {
 
     private async probeLoop() {
         while (this.isTracking) {
+            if (this.isPaused) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue;
+            }
             try {
                 await this.sendProbe();
             } catch (err) {
@@ -203,6 +209,7 @@ export class WhatsAppTracker {
     }
 
     private async sendProbe() {
+        if (this.isPaused) return;
         if (this.probeMethod === 'delete') {
             await this.sendDeleteProbe();
         } else {
@@ -330,6 +337,7 @@ export class WhatsAppTracker {
      */
     private handleRawReceipt(node: any) {
         try {
+            if (this.isPaused) return;
             const { attrs } = node;
             // We only care about 'inactive' receipts here
             if (attrs.type === 'inactive') {
@@ -364,6 +372,7 @@ export class WhatsAppTracker {
      * Process an ACK (receipt) from a device
      */
     private processAck(msgId: string, fromJid: string, type: string) {
+        if (this.isPaused) return;
         trackerLogger.debug(`[ACK PROCESS] ID: ${msgId}, JID: ${fromJid}, Type: ${type}`);
 
         if (!msgId || !fromJid) return;
@@ -392,6 +401,7 @@ export class WhatsAppTracker {
      * @param update Message update from WhatsApp
      */
     private analyzeUpdate(update: { key: proto.IMessageKey, update: Partial<proto.IWebMessageInfo> }) {
+        if (this.isPaused) return;
         const status = update.update.status;
         const msgId = update.key.id;
         const fromJid = update.key.remoteJid;
@@ -425,6 +435,7 @@ export class WhatsAppTracker {
      * @param timeout Time elapsed before timeout
      */
     private markDeviceOffline(jid: string, timeout: number) {
+        if (this.isPaused) return;
         // Initialize device metrics if not exists
         if (!this.deviceMetrics.has(jid)) {
             this.deviceMetrics.set(jid, {
@@ -451,6 +462,7 @@ export class WhatsAppTracker {
      * @param rtt Round-trip time in milliseconds
      */
     private addMeasurementForDevice(jid: string, rtt: number) {
+        if (this.isPaused) return;
         // Initialize device metrics if not exists
         if (!this.deviceMetrics.has(jid)) {
             this.deviceMetrics.set(jid, {
@@ -608,6 +620,7 @@ export class WhatsAppTracker {
      */
     public stopTracking() {
         this.isTracking = false;
+        this.isPaused = false;
 
         // Clear all pending timeouts
         for (const timeoutId of this.probeTimeouts.values()) {
@@ -617,5 +630,24 @@ export class WhatsAppTracker {
         this.probeStartTimes.clear();
 
         logger.info('Stopping tracking');
+    }
+
+    public pauseTracking() {
+        if (!this.isTracking || this.isPaused) return;
+        this.isPaused = true;
+
+        for (const timeoutId of this.probeTimeouts.values()) {
+            clearTimeout(timeoutId);
+        }
+        this.probeTimeouts.clear();
+        this.probeStartTimes.clear();
+
+        trackerLogger.info('Tracking paused');
+    }
+
+    public resumeTracking() {
+        if (!this.isTracking || !this.isPaused) return;
+        this.isPaused = false;
+        trackerLogger.info('Tracking resumed');
     }
 }
