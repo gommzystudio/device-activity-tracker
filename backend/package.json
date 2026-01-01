@@ -30,9 +30,7 @@
     "start": "npx tsx src/index.ts",
     "start:server": "npm run start:signal-api && npx tsx src/server.ts",
     "start:signal-api": "npx tsx src/scripts/init-signal.ts",
-    "start:client": "cd client && npm start",
-    "dev": "npm run start:server",
-    "postinstall": "cd client && npm install"
+    "dev": "npm run start:server"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
