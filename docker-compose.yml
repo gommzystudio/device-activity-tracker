@@ -1,7 +1,7 @@
 services:
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
       args:
         - PORT=${BACKEND_PORT:-3001}
@@ -20,17 +20,17 @@ services:
       - app-network
     restart: unless-stopped
 
-  client:
+  frontend:
     build:
-      context: ./client
+      context: ./frontend
       dockerfile: Dockerfile
       args:
-        - PORT=${CLIENT_PORT:-3000}
+        - PORT=${FRONTEND_PORT:-3000}
         - REACT_APP_API_URL=${BACKEND_URL:-http://localhost:3001}
     ports:
-      - "${CLIENT_PORT:-3000}:${CLIENT_PORT:-3000}"
+      - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
     environment:
-      - PORT=${CLIENT_PORT:-3000}
+      - PORT=${FRONTEND_PORT:-3000}
     depends_on:
       - backend
     networks:
