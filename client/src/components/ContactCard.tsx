@@ -51,8 +51,8 @@ export function ContactCard({
 }: ContactCardProps) {
     const lastData = data[data.length - 1];
     const currentStatus = devices.length > 0
-        ? (devices.find(d => d.state === 'OFFLINE')?.state ||
-            devices.find(d => d.state.includes('Online'))?.state ||
+        ? (devices.find(d => d.state.includes('Online'))?.state ||
+            devices.find(d => d.state === 'Standby')?.state ||
             devices[0].state)
         : 'Unknown';
 

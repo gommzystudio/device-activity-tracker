@@ -135,13 +135,31 @@ export class AdaptiveThresholdManager {
         // Ensure c1 is always the lower latency (Online)
         if (c1 > c2) [c1, c2] = [c2, c1];
 
-        this.onlineCentroid = c1;
-        this.standbyCentroid = c2;
-        this.threshold = (c1 + c2) / 2;
+        const separation = c2 - c1;
+        const MIN_SEPARATION = 300; // Minimum ms difference to be considered valid distinct states
 
-        // Confidence metric: normalized separation distance
-        // >500ms separation = 100% confidence
-        this.confidence = Math.min(1.0, (c2 - c1) / 500);
+        if (separation < MIN_SEPARATION) {
+            // Clusters are too close (just noise). We cannot reliably distinguish states.
+            // Check absolute value to guess state
+            const avg = (c1 + c2) / 2;
+            if (avg < 500) {
+                // Low latency but no variance -> Likely Always Online
+                this.onlineCentroid = avg;
+                this.standbyCentroid = avg + 1000; // Fake a standby
+                this.threshold = avg + 500;
+            } else {
+                // High latency and no variance -> Likely Always Standby or Bad Network
+                this.onlineCentroid = Math.max(0, avg - 1000); // Fake a online
+                this.standbyCentroid = avg;
+                this.threshold = avg - 250;
+            }
+            this.confidence = 0.1; // Low confidence
+        } else {
+            this.onlineCentroid = c1;
+            this.standbyCentroid = c2;
+            this.threshold = (c1 + c2) / 2;
+            this.confidence = Math.min(1.0, separation / 1000);
+        }
     }
 
     private avg(arr: number[], fallback: number): number {
