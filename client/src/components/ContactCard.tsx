@@ -1,6 +1,6 @@
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Square, Activity, Wifi, Smartphone, Monitor, MessageCircle } from 'lucide-react';
+import { Square, Activity, Wifi, Smartphone, Monitor, MessageCircle, BarChart2, ShieldCheck, Zap } from 'lucide-react';
 import clsx from 'clsx';
 
 type Platform = 'whatsapp' | 'signal';
@@ -8,8 +8,11 @@ type Platform = 'whatsapp' | 'signal';
 interface TrackerData {
     rtt: number;
     avg: number;
-    median: number;
+    // New metrics
+    onlineAvg: number;
+    standbyAvg: number;
     threshold: number;
+    confidence: number;
     state: string;
     timestamp: number;
 }
@@ -55,6 +58,12 @@ export function ContactCard({
 
     // Blur phone number in privacy mode
     const blurredNumber = privacyMode ? displayNumber.replace(/\d/g, '•') : displayNumber;
+
+    // Confidence as percentage
+    const confidencePct = lastData?.confidence ? Math.round(lastData.confidence * 100) : 0;
+
+    // Determine confidence color
+    const confidenceColor = confidencePct > 80 ? 'text-green-600' : confidencePct > 50 ? 'text-yellow-600' : 'text-red-500';
 
     return (
         <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg border border-gray-200 overflow-hidden">
@@ -131,6 +140,12 @@ export function ContactCard({
                                 <span className="flex items-center gap-1"><Smartphone size={16} /> Devices</span>
                                 <span className="font-medium">{deviceCount || 0}</span>
                             </div>
+                            {lastData?.confidence !== undefined && (
+                                <div className="flex justify-between items-center text-sm text-gray-600">
+                                    <span className="flex items-center gap-1"><ShieldCheck size={16} /> Confidence</span>
+                                    <span className={clsx("font-bold", confidenceColor)}>{confidencePct}%</span>
+                                </div>
+                            )}
                         </div>
 
                         {/* Device List */}
@@ -163,23 +178,36 @@ export function ContactCard({
                     <div className="md:col-span-2 space-y-6">
                         {/* Metrics Grid */}
                         <div className="grid grid-cols-3 gap-4">
-                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-                                <div className="text-sm text-gray-500 mb-1 flex items-center gap-1"><Activity size={16} /> Current Avg RTT</div>
-                                <div className="text-2xl font-bold text-gray-900">{lastData?.avg.toFixed(0) || '-'} ms</div>
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                                <div className="text-sm text-gray-500 mb-1 flex items-center gap-1"><Activity size={16} /> Current RTT</div>
+                                <div className="text-2xl font-bold text-gray-900">{lastData?.rtt || '-'} <span className="text-sm font-normal text-gray-500">ms</span></div>
                             </div>
-                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-                                <div className="text-sm text-gray-500 mb-1">Median (50)</div>
-                                <div className="text-2xl font-bold text-gray-900">{lastData?.median.toFixed(0) || '-'} ms</div>
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                                <div className="text-sm text-gray-500 mb-1 flex items-center gap-1"><BarChart2 size={16} /> Online/Standby Avg</div>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-lg font-bold text-green-600">{lastData?.onlineAvg?.toFixed(0) || '-'}</span>
+                                    <span className="text-gray-400">/</span>
+                                    <span className="text-lg font-bold text-yellow-600">{lastData?.standbyAvg?.toFixed(0) || '-'}</span>
+                                    <span className="text-sm text-gray-500">ms</span>
+                                </div>
                             </div>
-                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-                                <div className="text-sm text-gray-500 mb-1">Threshold</div>
-                                <div className="text-2xl font-bold text-blue-600">{lastData?.threshold.toFixed(0) || '-'} ms</div>
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                                <div className="text-sm text-gray-500 mb-1 flex items-center gap-1"><Zap size={16} /> Threshold</div>
+                                <div className="text-2xl font-bold text-blue-600">{lastData?.threshold?.toFixed(0) || '-'} <span className="text-sm font-normal text-gray-500">ms</span></div>
                             </div>
                         </div>
 
                         {/* Chart */}
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-[300px]">
-                            <h5 className="text-sm font-medium text-gray-500 mb-4">RTT History & Threshold</h5>
+                            <div className="flex justify-between items-center mb-4">
+                                <h5 className="text-sm font-medium text-gray-500">RTT History & Adaptive Clustering</h5>
+                                <div className="flex gap-4 text-xs">
+                                    <div className="flex items-center gap-1"><div className="w-3 h-0.5 bg-blue-500"></div>RTT</div>
+                                    <div className="flex items-center gap-1"><div className="w-3 h-0.5 bg-red-500 border-dashed border-t"></div>Threshold</div>
+                                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500"></div>Online Cluster</div>
+                                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-500"></div>Standby Cluster</div>
+                                </div>
+                            </div>
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={data}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -189,8 +217,15 @@ export function ContactCard({
                                         labelFormatter={(t: number) => new Date(t).toLocaleTimeString()}
                                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     />
-                                    <Line type="monotone" dataKey="avg" stroke="#3b82f6" strokeWidth={2} dot={false} name="Avg RTT" isAnimationActive={false} />
-                                    <Line type="step" dataKey="threshold" stroke="#ef4444" strokeDasharray="5 5" dot={false} name="Threshold" isAnimationActive={false} />
+                                    {/* Main RTT Line */}
+                                    <Line type="monotone" dataKey="rtt" stroke="#3b82f6" strokeWidth={2} dot={false} name="RTT" isAnimationActive={false} />
+
+                                    {/* Threshold Line */}
+                                    <Line type="step" dataKey="threshold" stroke="#ef4444" strokeDasharray="5 5" strokeWidth={2} dot={false} name="Threshold" isAnimationActive={false} />
+
+                                    {/* Cluster Centers (Visualized as faint lines or dots) */}
+                                    <Line type="monotone" dataKey="onlineAvg" stroke="#22c55e" strokeOpacity={0.5} strokeWidth={1} dot={false} name="Online Target" isAnimationActive={false} />
+                                    <Line type="monotone" dataKey="standbyAvg" stroke="#eab308" strokeOpacity={0.5} strokeWidth={1} dot={false} name="Standby Target" isAnimationActive={false} />
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>

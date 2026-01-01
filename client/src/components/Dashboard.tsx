@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {Eye, EyeOff, Plus, Trash2, Zap, MessageCircle, Settings} from 'lucide-react';
+import { Eye, EyeOff, Plus, Trash2, Zap, MessageCircle, Settings } from 'lucide-react';
 import { socket, Platform, ConnectionState } from '../App';
 import { ContactCard } from './ContactCard';
 import { Login } from './Login';
@@ -15,6 +15,10 @@ interface TrackerData {
     avg: number;
     median: number;
     threshold: number;
+    // New metrics
+    onlineAvg: number;
+    standbyAvg: number;
+    confidence: number;
     state: string;
     timestamp: number;
 }
@@ -24,6 +28,10 @@ interface DeviceInfo {
     state: string;
     rtt: number;
     avg: number;
+    onlineAvg: number;
+    standbyAvg: number;
+    threshold: number;
+    confidence: number;
 }
 
 interface ContactInfo {
@@ -73,16 +81,25 @@ export function Dashboard({ connectionState }: DashboardProps) {
                     }
 
                     // Add to chart data
-                    if (data.median !== undefined && data.devices && data.devices.length > 0) {
+                    if (data.devices && data.devices.length > 0) {
+                        const device = data.devices[0];
                         const newDataPoint: TrackerData = {
-                            rtt: data.devices[0].rtt,
-                            avg: data.devices[0].avg,
-                            median: data.median,
-                            threshold: data.threshold,
-                            state: data.devices.find((d: DeviceInfo) => d.state.includes('Online'))?.state || data.devices[0].state,
+                            rtt: device.rtt,
+                            avg: device.avg || 0,
+                            median: 0,
+                            threshold: device.threshold,
+                            onlineAvg: device.onlineAvg,
+                            standbyAvg: device.standbyAvg,
+                            confidence: device.confidence,
+                            state: data.devices.find((d: DeviceInfo) => d.state.includes('Online'))?.state || device.state,
                             timestamp: Date.now(),
                         };
                         updatedContact.data = [...updatedContact.data, newDataPoint];
+
+                        // Limit history to 100 points
+                        if (updatedContact.data.length > 100) {
+                            updatedContact.data.shift();
+                        }
                     }
 
                     next.set(jid, updatedContact);
@@ -227,11 +244,10 @@ export function Dashboard({ connectionState }: DashboardProps) {
                         {/* Manage Connections button */}
                         <button
                             onClick={() => setShowConnections(!showConnections)}
-                            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-1 ${
-                                showConnections
+                            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-1 ${showConnections
                                     ? 'bg-gray-700 text-white'
                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
+                                }`}
                         >
                             <Settings size={14} />
                             {showConnections ? 'Hide Connections' : 'Manage Connections'}
@@ -244,11 +260,10 @@ export function Dashboard({ connectionState }: DashboardProps) {
                             <div className="flex rounded-lg overflow-hidden border border-gray-300">
                                 <button
                                     onClick={() => handleProbeMethodChange('delete')}
-                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 flex items-center gap-1 ${
-                                        probeMethod === 'delete'
+                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 flex items-center gap-1 ${probeMethod === 'delete'
                                             ? 'bg-purple-600 text-white'
                                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                    }`}
+                                        }`}
                                     title="Silent Delete Probe - Completely covert, target sees nothing"
                                 >
                                     <Trash2 size={14} />
@@ -256,11 +271,10 @@ export function Dashboard({ connectionState }: DashboardProps) {
                                 </button>
                                 <button
                                     onClick={() => handleProbeMethodChange('reaction')}
-                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 flex items-center gap-1 ${
-                                        probeMethod === 'reaction'
+                                    className={`px-3 py-1.5 text-sm font-medium transition-all duration-200 flex items-center gap-1 ${probeMethod === 'reaction'
                                             ? 'bg-yellow-500 text-white'
                                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                    }`}
+                                        }`}
                                     title="Reaction Probe - Sends reactions to non-existent messages"
                                 >
                                     <Zap size={14} />
@@ -271,11 +285,10 @@ export function Dashboard({ connectionState }: DashboardProps) {
                         {/* Privacy Mode Toggle */}
                         <button
                             onClick={() => setPrivacyMode(!privacyMode)}
-                            className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-all duration-200 ${
-                                privacyMode 
-                                    ? 'bg-green-600 text-white hover:bg-green-700 shadow-md' 
+                            className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-all duration-200 ${privacyMode
+                                    ? 'bg-green-600 text-white hover:bg-green-700 shadow-md'
                                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
+                                }`}
                             title={privacyMode ? 'Privacy Mode: ON (Click to disable)' : 'Privacy Mode: OFF (Click to enable)'}
                         >
                             {privacyMode ? (
@@ -298,13 +311,12 @@ export function Dashboard({ connectionState }: DashboardProps) {
                         <button
                             onClick={() => setSelectedPlatform('whatsapp')}
                             disabled={!connectionState.whatsapp}
-                            className={`px-4 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
-                                selectedPlatform === 'whatsapp'
+                            className={`px-4 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 ${selectedPlatform === 'whatsapp'
                                     ? 'bg-green-600 text-white'
                                     : connectionState.whatsapp
                                         ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                         : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            }`}
+                                }`}
                             title={connectionState.whatsapp ? 'WhatsApp' : 'WhatsApp not connected'}
                         >
                             <MessageCircle size={16} />
@@ -313,13 +325,12 @@ export function Dashboard({ connectionState }: DashboardProps) {
                         <button
                             onClick={() => setSelectedPlatform('signal')}
                             disabled={!connectionState.signal}
-                            className={`px-4 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
-                                selectedPlatform === 'signal'
+                            className={`px-4 py-2 text-sm font-medium transition-all duration-200 flex items-center gap-2 ${selectedPlatform === 'signal'
                                     ? 'bg-blue-600 text-white'
                                     : connectionState.signal
                                         ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                         : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            }`}
+                                }`}
                             title={connectionState.signal ? 'Signal' : 'Signal not connected'}
                         >
                             <MessageCircle size={16} />
