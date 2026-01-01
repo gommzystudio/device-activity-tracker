@@ -36,8 +36,8 @@ git clone https://github.com/gommzystudio/device-activity-tracker.git
 cd device-activity-tracker
 
 # Install dependencies
-npm install
-cd client && npm install && cd ..
+cd backend && npm install && cd ..
+cd frontend && npm install && cd ..
 ```
 
 **Requirements:** Node.js 20+, npm, WhatsApp account
@@ -54,14 +54,14 @@ cp .env.example .env
 
 # (Optional) Customize ports in .env file
 # BACKEND_PORT=3001
-# CLIENT_PORT=3000
+# FRONTEND_PORT=3000
 
 # Build and start containers
 docker compose up --build
 ```
 
 The application will be available at:
-- Frontend: [http://localhost:3000](http://localhost:3000) (or your configured `CLIENT_PORT`)
+- Frontend: [http://localhost:3000](http://localhost:3000) (or your configured `FRONTEND_PORT`)
 - Backend: [http://localhost:3001](http://localhost:3001) (or your configured `BACKEND_PORT`)
 
 To stop the containers:
