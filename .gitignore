@@ -1,11 +1,9 @@
 # Node modules
 node_modules/
-client/node_modules/
 
 # Build outputs
 dist/
 build/
-client/build/
 
 # WhatsApp authentication data (IMPORTANT: Keep this private!)
 auth_info_baileys/
@@ -71,9 +69,6 @@ temp/
 
 # Dependency directories
 jspm_packages/
-
-# Production build
-/build
 
 # Misc
 .cache
