@@ -75,10 +75,12 @@ docker compose down
 
 ```bash
 # Terminal 1: Start backend
+cd backend
 npm run start:server
 
 # Terminal 2: Start frontend
-npm run start:client
+cd frontend
+npm run start
 ```
 
 Open `http://localhost:3000`, scan QR code with WhatsApp, then enter phone number to track (e.g., `491701234567`).
@@ -137,13 +139,13 @@ In the web interface, you can switch between probe methods using the dropdown in
 
 ```
 device-activity-tracker/
-├── src/
-│   ├── tracker.ts         # WhatsApp RTT analysis logic
-│   ├── signal-tracker.ts  # Signal RTT analysis logic
-│   ├── server.ts          # Backend API server (both platforms)
-│   └── index.ts           # CLI interface
-├── client/                # React web interface
-└── package.json
+├── backend/
+│   └── src/
+│       ├── tracker.ts         # WhatsApp RTT analysis logic
+│       ├── signal-tracker.ts  # Signal RTT analysis logic
+│       ├── server.ts          # Backend API server (both platforms)
+│       └── index.ts           # CLI interface
+└── frontend/                  # React web interface
 ```
 
 ## How to Protect Yourself
