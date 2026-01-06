@@ -37,7 +37,6 @@ cd device-activity-tracker
 
 # Install dependencies
 npm install
-cd client && npm install && cd ..
 ```
 
 **Requirements:** Node.js 20+, npm, WhatsApp account
