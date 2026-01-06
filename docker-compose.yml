@@ -40,7 +40,7 @@ services:
   signal-api:
     image: bbernhard/signal-cli-rest-api
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8080}:8080"
     environment:
       - MODE=json-rpc
     restart: unless-stopped
