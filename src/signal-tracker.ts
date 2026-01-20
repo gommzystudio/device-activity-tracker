@@ -61,16 +61,18 @@ class TrackerLogger {
 const logger = new TrackerLogger(true);
 
 export class SignalTracker {
-    private apiUrl: string;
-    private senderNumber: string;
-    private targetNumber: string;
-    private isTracking: boolean = false;
-    private deviceMetrics: Map<string, DeviceMetrics> = new Map();
-    private globalRttHistory: number[] = [];
-    private probeMethod: ProbeMethod = 'reaction';
-    private ws: WebSocket | null = null;
-    private reconnectTimeout: NodeJS.Timeout | null = null;
-    public onUpdate?: (data: any) => void;
+     private apiUrl: string;
+     private senderNumber: string;
+     private targetNumber: string;
+     private isTracking: boolean = false;
+     private deviceMetrics: Map<string, DeviceMetrics> = new Map();
+     private globalRttHistory: number[] = [];
+     private probeMethod: ProbeMethod = 'reaction';
+     private probeMinDelay: number = 1000; // Min delay in ms
+     private probeMaxDelay: number = 2000; // Max delay in ms
+     private ws: WebSocket | null = null;
+     private reconnectTimeout: NodeJS.Timeout | null = null;
+     public onUpdate?: (data: any) => void;
 
     // Serialized probe tracking (per Codex recommendation)
     // Only ONE probe in flight at a time - correlate by order, not timestamp
@@ -97,6 +99,12 @@ export class SignalTracker {
 
     public getProbeMethod(): ProbeMethod {
         return this.probeMethod;
+    }
+
+    public setProbeDelay(minDelay: number, maxDelay: number) {
+        this.probeMinDelay = minDelay;
+        this.probeMaxDelay = maxDelay;
+        logger.info(`Probe delay changed to: ${minDelay}-${maxDelay}ms`);
     }
 
     /**
@@ -230,8 +238,9 @@ export class SignalTracker {
             } catch (err) {
                 logger.debug('Error sending probe:', err);
             }
-            // Small delay between probes
-            const delay = Math.floor(Math.random() * 1000) + 1000;
+            // Delay between probes
+            const range = this.probeMaxDelay - this.probeMinDelay;
+            const delay = Math.floor(Math.random() * range) + this.probeMinDelay;
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     }

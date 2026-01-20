@@ -94,17 +94,19 @@ interface DeviceMetrics {
  * by Gegenhuber et al., University of Vienna & SBA Research
  */
 export class WhatsAppTracker {
-    private sock: WASocket;
-    private targetJid: string;
-    private trackedJids: Set<string> = new Set(); // Multi-device support
-    private isTracking: boolean = false;
-    private deviceMetrics: Map<string, DeviceMetrics> = new Map();
-    private globalRttHistory: number[] = []; // For threshold calculation
-    private probeStartTimes: Map<string, number> = new Map();
-    private probeTimeouts: Map<string, NodeJS.Timeout> = new Map();
-    private lastPresence: string | null = null;
-    private probeMethod: ProbeMethod = 'delete'; // Default to delete method
-    public onUpdate?: (data: any) => void;
+     private sock: WASocket;
+     private targetJid: string;
+     private trackedJids: Set<string> = new Set(); // Multi-device support
+     private isTracking: boolean = false;
+     private deviceMetrics: Map<string, DeviceMetrics> = new Map();
+     private globalRttHistory: number[] = []; // For threshold calculation
+     private probeStartTimes: Map<string, number> = new Map();
+     private probeTimeouts: Map<string, NodeJS.Timeout> = new Map();
+     private lastPresence: string | null = null;
+     private probeMethod: ProbeMethod = 'delete'; // Default to delete method
+     private probeMinDelay: number = 500; // Min delay in ms
+     private probeMaxDelay: number = 1000; // Max delay in ms
+     public onUpdate?: (data: any) => void;
 
     constructor(sock: WASocket, targetJid: string, debugMode: boolean = false) {
         this.sock = sock;
@@ -120,6 +122,12 @@ export class WhatsAppTracker {
 
     public getProbeMethod(): ProbeMethod {
         return this.probeMethod;
+    }
+
+    public setProbeDelay(minDelay: number, maxDelay: number) {
+        this.probeMinDelay = minDelay;
+        this.probeMaxDelay = maxDelay;
+        trackerLogger.info(`\n🔄 Probe delay changed to: ${minDelay}-${maxDelay}ms\n`);
     }
 
     /**
@@ -192,12 +200,13 @@ export class WhatsAppTracker {
 
     private async probeLoop() {
         while (this.isTracking) {
+            const range = this.probeMaxDelay - this.probeMinDelay;
+            const delay = Math.floor(Math.random() * range) + this.probeMinDelay;
             try {
                 await this.sendProbe();
             } catch (err) {
                 logger.error(err, 'Error sending probe');
             }
-            const delay = Math.floor(Math.random() * 100) + 2000;
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
@@ -241,20 +250,22 @@ export class WhatsAppTracker {
                 trackerLogger.debug(`[PROBE-DELETE] Delete probe sent successfully, message ID: ${result.key.id}`);
                 this.probeStartTimes.set(result.key.id, startTime);
 
-                // Set timeout: if no CLIENT ACK within 10 seconds, mark device as OFFLINE
+                // Set timeout: if no CLIENT ACK within timeout period, mark device as OFFLINE
+                // Timeout = max delay * 10 (adaptive to probe interval)
+                const timeoutMs = this.probeMaxDelay * 10;
                 const timeoutId = setTimeout(() => {
-                    if (this.probeStartTimes.has(result.key.id!)) {
-                        const elapsedTime = Date.now() - startTime;
-                        trackerLogger.debug(`[PROBE-DELETE TIMEOUT] No CLIENT ACK for ${result.key.id} after ${elapsedTime}ms - Device is OFFLINE`);
-                        this.probeStartTimes.delete(result.key.id!);
-                        this.probeTimeouts.delete(result.key.id!);
+                     if (this.probeStartTimes.has(result.key.id!)) {
+                         const elapsedTime = Date.now() - startTime;
+                         trackerLogger.debug(`[PROBE-DELETE TIMEOUT] No CLIENT ACK for ${result.key.id} after ${elapsedTime}ms - Device is OFFLINE`);
+                         this.probeStartTimes.delete(result.key.id!);
+                         this.probeTimeouts.delete(result.key.id!);
 
                         // Mark device as OFFLINE due to no response
                         if (result.key.remoteJid) {
                             this.markDeviceOffline(result.key.remoteJid, elapsedTime);
                         }
-                    }
-                }, 10000); // 10 seconds timeout
+                        }
+                        }, timeoutMs);
 
                 this.probeTimeouts.set(result.key.id, timeoutId);
             } else {
@@ -297,23 +308,25 @@ export class WhatsAppTracker {
             const startTime = Date.now();
 
             if (result?.key?.id) {
-                trackerLogger.debug(`[PROBE-REACTION] Probe sent successfully, message ID: ${result.key.id}`);
-                this.probeStartTimes.set(result.key.id, startTime);
+                 trackerLogger.debug(`[PROBE-REACTION] Probe sent successfully, message ID: ${result.key.id}`);
+                 this.probeStartTimes.set(result.key.id, startTime);
 
-                // Set timeout: if no CLIENT ACK within 10 seconds, mark device as OFFLINE
-                const timeoutId = setTimeout(() => {
-                    if (this.probeStartTimes.has(result.key.id!)) {
-                        const elapsedTime = Date.now() - startTime;
-                        trackerLogger.debug(`[PROBE-REACTION TIMEOUT] No CLIENT ACK for ${result.key.id} after ${elapsedTime}ms - Device is OFFLINE`);
-                        this.probeStartTimes.delete(result.key.id!);
-                        this.probeTimeouts.delete(result.key.id!);
+                 // Set timeout: if no CLIENT ACK within timeout period, mark device as OFFLINE
+                 // Timeout = max delay * 10 (adaptive to probe interval)
+                 const timeoutMs = this.probeMaxDelay * 10;
+                 const timeoutId = setTimeout(() => {
+                     if (this.probeStartTimes.has(result.key.id!)) {
+                         const elapsedTime = Date.now() - startTime;
+                         trackerLogger.debug(`[PROBE-REACTION TIMEOUT] No CLIENT ACK for ${result.key.id} after ${elapsedTime}ms - Device is OFFLINE`);
+                         this.probeStartTimes.delete(result.key.id!);
+                         this.probeTimeouts.delete(result.key.id!);
 
-                        // Mark device as OFFLINE due to no response
-                        if (result.key.remoteJid) {
-                            this.markDeviceOffline(result.key.remoteJid, elapsedTime);
-                        }
-                    }
-                }, 10000); // 10 seconds timeout
+                         // Mark device as OFFLINE due to no response
+                         if (result.key.remoteJid) {
+                             this.markDeviceOffline(result.key.remoteJid, elapsedTime);
+                         }
+                     }
+                 }, timeoutMs);
 
                 this.probeTimeouts.set(result.key.id, timeoutId);
             } else {
