@@ -51,41 +51,41 @@ interface TrackerEntry {
 const trackers: Map<string, TrackerEntry> = new Map(); // JID/Number -> Tracker entry
 
 async function connectToWhatsApp() {
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
-    sock = makeWASocket({
-        auth: state,
-        logger: pino({ level: 'debug' }),
-        markOnlineOnConnect: true,
-        printQRInTerminal: false,
-    });
+     sock = makeWASocket({
+         auth: state,
+         logger: pino({ level: 'error' }), // Changed from 'debug' to 'error' to reduce noise
+         markOnlineOnConnect: true,
+         printQRInTerminal: false,
+     });
 
-    sock.ev.on('connection.update', async (update: any) => {
-        const { connection, lastDisconnect, qr } = update;
+     sock.ev.on('connection.update', async (update: any) => {
+         const { connection, lastDisconnect, qr } = update;
 
-        if (qr) {
-            console.log('QR Code generated');
-            currentWhatsAppQr = qr; // Store the QR code
-            io.emit('qr', qr);
-        }
+         if (qr) {
+             console.log('QR Code generated');
+             currentWhatsAppQr = qr; // Store the QR code
+             io.emit('qr', qr);
+         }
 
-        if (connection === 'close') {
-            isWhatsAppConnected = false;
-            currentWhatsAppQr = null; // Clear QR on close
-            const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('connection closed, reconnecting ', shouldReconnect);
-            if (shouldReconnect) {
-                connectToWhatsApp();
-            }
-        } else if (connection === 'open') {
-            isWhatsAppConnected = true;
-            currentWhatsAppQr = null; // Clear QR on successful connection
-            console.log('opened connection');
-            io.emit('connection-open');
-        }
-    });
+         if (connection === 'close') {
+             isWhatsAppConnected = false;
+             currentWhatsAppQr = null; // Clear QR on close
+             const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+             console.log('connection closed, reconnecting ', shouldReconnect);
+             if (shouldReconnect) {
+                 setTimeout(() => connectToWhatsApp(), 3000); // Reconnect after 3 seconds
+             }
+         } else if (connection === 'open') {
+             isWhatsAppConnected = true;
+             currentWhatsAppQr = null; // Clear QR on successful connection
+             console.log('opened connection');
+             io.emit('connection-open');
+         }
+     });
 
-    sock.ev.on('creds.update', saveCreds);
+     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest }: any) => {
         console.log(`[SESSION] History sync - Chats: ${chats.length}, Contacts: ${contacts.length}, Messages: ${messages.length}, Latest: ${isLatest}`);

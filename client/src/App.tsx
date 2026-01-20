@@ -156,86 +156,97 @@ function App() {
                      }`}>{getTranslation(language, 'title')}</h1>
                      <div className="flex flex-wrap items-center gap-3">
                         {/* Theme Toggle */}
-                        <button
-                            onClick={handleThemeChange}
-                            className={`group relative p-2.5 rounded-lg border transition-all duration-300 flex items-center justify-center ${
-                                themeButtonAnimating ? 'scale-110 drop-shadow-lg' : ''
-                            } hover:shadow-md ${
-                                theme === 'dark'
-                                    ? 'bg-gray-800 border-gray-600 hover:border-blue-500'
-                                    : 'bg-white border-gray-300 hover:border-blue-400'
-                            }`}
-                            title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-                        >
-                            <div className="relative w-5 h-5">
-                                <Sun 
-                                    size={20} 
-                                    className={`absolute inset-0 text-amber-500 transition-all duration-500 ${
-                                        theme === 'light' 
-                                            ? 'opacity-100 rotate-0 scale-100' 
-                                            : 'opacity-0 rotate-90 scale-0'
-                                    }`} 
-                                />
-                                <Moon 
-                                    size={20} 
-                                    className={`absolute inset-0 text-blue-600 transition-all duration-500 ${
-                                        theme === 'dark' 
-                                            ? 'opacity-100 rotate-0 scale-100' 
-                                            : 'opacity-0 -rotate-90 scale-0'
-                                    }`} 
-                                />
-                            </div>
-                            <div className="absolute inset-0 bg-gradient-to-r from-amber-100 to-blue-100 rounded-lg opacity-0 group-hover:opacity-20 transition-opacity duration-300" />
-                        </button>
+                         <button
+                             onClick={handleThemeChange}
+                             className={`group relative p-3 rounded-full border-2 transition-all duration-500 flex items-center justify-center ${
+                                 themeButtonAnimating ? 'scale-110' : ''
+                             } ${
+                                 theme === 'dark'
+                                     ? 'bg-gray-900 border-indigo-600'
+                                     : 'bg-gradient-to-br from-amber-50 to-blue-50 border-amber-300'
+                             }`}
+                             style={{
+                                 boxShadow: theme === 'dark'
+                                     ? '0 0 20px rgba(99, 102, 241, 0.3), inset 0 0 15px rgba(99, 102, 241, 0.1)'
+                                     : '0 0 20px rgba(217, 119, 6, 0.3), inset 0 0 15px rgba(217, 119, 6, 0.1)',
+                                 transition: 'all 500ms ease-out'
+                             }}
+                             title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+                         >
+                             <div className="relative w-6 h-6">
+                                 <Sun 
+                                     size={24} 
+                                     className={`absolute inset-0 text-amber-500 transition-all duration-500 ${
+                                         theme === 'light' 
+                                             ? 'opacity-100 rotate-0 scale-100' 
+                                             : 'opacity-0 rotate-90 scale-0'
+                                     }`} 
+                                 />
+                                 <Moon 
+                                     size={24} 
+                                     className={`absolute inset-0 text-indigo-500 transition-all duration-500 ${
+                                         theme === 'dark' 
+                                             ? 'opacity-100 rotate-0 scale-100' 
+                                             : 'opacity-0 -rotate-90 scale-0'
+                                     }`} 
+                                 />
+                             </div>
+                         </button>
 
                         {/* Language Switcher */}
-                         <div className={`relative flex items-center gap-2 rounded-lg border p-1 w-fit ${
-                             theme === 'dark'
-                                 ? 'bg-gray-800 border-gray-600'
-                                 : 'bg-white border-gray-300'
-                         }`}>
+                         <div 
+                             className={`relative inline-flex items-center rounded-full p-1 w-fit border-2 transition-all duration-300 ${
+                                 theme === 'dark'
+                                     ? 'bg-gray-900 border-gray-700'
+                                     : 'bg-gray-50 border-blue-200'
+                             }`}
+                             style={{
+                                 boxShadow: language === 'en' 
+                                     ? `0 0 20px rgba(59, 130, 246, 0.3), inset 0 0 20px rgba(59, 130, 246, 0.1)`
+                                     : `0 0 20px rgba(79, 70, 229, 0.3), inset 0 0 20px rgba(79, 70, 229, 0.1)`,
+                                 transition: 'box-shadow 500ms ease-out'
+                             }}
+                         >
                              {/* Animated Background Slider */}
                              <div 
-                                 className={`absolute top-1 bottom-1 w-14 bg-blue-600 rounded transition-all duration-500 ease-in-out ${
+                                 className={`absolute top-1 bottom-1 w-16 bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 rounded-full transition-all duration-500 ease-out ${
                                      language === 'en' ? 'left-1' : 'left-16'
                                  }`}
+                                 style={{
+                                     boxShadow: language === 'en' 
+                                         ? '0 8px 25px rgba(59, 130, 246, 0.5)' 
+                                         : '0 8px 25px rgba(79, 70, 229, 0.5)',
+                                     transition: 'all 500ms ease-out'
+                                 }}
                              />
                              
                              <button
                                  onClick={() => handleLanguageChange('en')}
-                                 className={`relative px-3 py-1.5 text-sm font-medium rounded flex items-center gap-1 transition-all duration-500 z-10 ${
-                                     langButtonAnimating && language === 'en'
-                                         ? 'scale-110 drop-shadow-lg'
-                                         : ''
-                                 } ${
+                                 className={`relative px-4 py-2 text-sm font-bold rounded-full flex items-center justify-center gap-1.5 transition-all duration-500 z-10 w-16 ${
                                      language === 'en'
                                          ? 'text-white'
-                                         : 'text-gray-600 hover:text-gray-800'
+                                         : `${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`
                                  }`}
                                  title="English"
                              >
                                  <Globe 
-                                     size={14} 
-                                     className={`transition-transform duration-500 ${
-                                         langButtonAnimating && language === 'en' ? 'animate-spin' : ''
+                                     size={15} 
+                                     className={`transition-all duration-500 flex-shrink-0 ${
+                                         langButtonAnimating && language === 'en' ? 'animate-spin scale-110' : ''
                                      }`} 
                                  />
-                                 EN
+                                 <span className="font-semibold">EN</span>
                              </button>
                              <button
                                  onClick={() => handleLanguageChange('ru')}
-                                 className={`relative px-3 py-1.5 text-sm font-medium rounded flex items-center gap-1 transition-all duration-500 z-10 ${
-                                     langButtonAnimating && language === 'ru'
-                                         ? 'scale-110 drop-shadow-lg'
-                                         : ''
-                                 } ${
+                                 className={`relative px-4 py-2 text-sm font-bold rounded-full flex items-center justify-center gap-1.5 transition-all duration-500 z-10 w-16 ${
                                      language === 'ru'
                                          ? 'text-white'
-                                         : 'text-gray-600 hover:text-gray-800'
+                                         : `${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`
                                  }`}
                                  title="Русский"
                              >
-                                 РУ
+                                 <span className="font-semibold">РУ</span>
                              </button>
                          </div>
 

@@ -2,6 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Global Button Style */
+@layer components {
+    .btn-primary {
+        @apply px-4 py-2 rounded-lg font-semibold transition-all duration-300 border-2;
+    }
+
+    .btn-primary-light {
+        @apply bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 hover:border-blue-300;
+    }
+
+    .btn-primary-dark {
+        @apply bg-gradient-to-br from-indigo-600 to-blue-700 text-white border-indigo-500 hover:border-indigo-400;
+    }
+
+    /* Input/Select Style */
+    input[type="text"],
+    input[type="number"],
+    select,
+    textarea {
+        @apply transition-all duration-300 focus:outline-none;
+    }
+
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    select:focus,
+    textarea:focus {
+        @apply ring-2 ring-blue-500 ring-opacity-50;
+    }
+}
+
 body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',

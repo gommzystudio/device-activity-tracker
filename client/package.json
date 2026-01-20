@@ -57,6 +57,7 @@
     "@types/estree": "^1.0.8",
     "@types/istanbul-lib-report": "^3.0.3",
     "@types/yargs-parser": "^21.0.3",
+    "ajv": "^8.17.1",
     "autoprefixer": "^10.4.22",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17"
