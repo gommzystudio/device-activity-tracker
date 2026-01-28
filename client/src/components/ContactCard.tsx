@@ -212,7 +212,7 @@ export function ContactCard({
                                     isAnimationActive={false}
                                     />
                                 </LineChart>
-                                </ResponsiveContainer>
+                            </ResponsiveContainer>
                         </div>
                     </div>
                 </div>
