@@ -32,7 +32,8 @@
     "start:signal-api": "npx tsx src/scripts/init-signal.ts",
     "start:client": "cd client && npm start",
     "dev": "npm run start:server",
-    "postinstall": "cd client && npm install"
+    "postinstall": "cd client && npm install",
+    "check-master": "git checkout master && npm install && htmlhint \"**/*.html\""
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
@@ -49,6 +50,7 @@
     "@types/express": "^5.0.6",
     "@types/qrcode-terminal": "^0.12.2",
     "@types/ws": "^8.18.1",
+    "htmlhint": "^1.9.1",
     "tailwindcss": "^3.4.18",
     "tsx": "^4.21.0",
     "typescript": "^5.7.2"

@@ -1,0 +1,242 @@
+🛡️ ROZSZERZONE README – Kompleksowa ochrona przed RTT Trackingiem
+
+(Poziom: zaawansowany / cyberbezpieczeństwo operacyjne)
+
+📖 Cel dokumentu
+
+Celem jest maksymalne ograniczenie możliwości profilowania użytkownika na podstawie analizy Round-Trip Time (RTT) w komunikatorach takich jak WhatsApp i Signal.
+
+Badania „Careless Whisper” (2024) wykazały, że poprzez pasywne sondowanie można wyciągać wnioski o:
+
+aktywności urządzenia
+
+stanie ekranu (on/off)
+
+przejściach między WiFi ↔ LTE/5G
+
+rytmie dnia użytkownika
+
+potencjalnej lokalizacji (zmiany infrastruktury sieciowej)
+
+RTT tracking to atak metadanych, a metadane są często bardziej wartościowe niż treść wiadomości.
+
+🔎 Model zagrożenia (Threat Model)
+🎯 Co atakujący może zrobić?
+
+Atakujący:
+
+Wysyła „puste” wiadomości, reakcje lub żądania inicjalizacji sesji
+
+Mierzy czas odpowiedzi serwera
+
+Analizuje różnice milisekundowe
+
+Buduje profil zachowań
+
+Nie potrzebuje:
+
+Dostępu do Twojego telefonu
+
+Malware
+
+Przejęcia konta
+
+Wystarczy, że zna Twój numer.
+
+🧠 Dlaczego to działa?
+
+RTT zależy od:
+
+stanu procesora (deep sleep vs aktywny)
+
+warstwy radiowej (WiFi vs LTE vs 5G)
+
+NAT / firewalla operatora
+
+routingu sieci
+
+buforowania aplikacji
+
+Każdy z tych elementów zostawia odcisk czasowy (timing fingerprint).
+
+🛡️ STRATEGIA OBRONY – WARSTWOWA (Defense in Depth)
+🔹 WARSTWA 1 – Minimalizacja powierzchni ataku
+📱 WhatsApp – konfiguracja prywatności
+
+W aplikacji WhatsApp:
+
+Ustawienia → Prywatność → Zaawansowane
+
+✅ Włącz: Blokuj wiadomości od nieznanych kont
+
+Prywatność:
+
+Ostatnio widziany → „Moje kontakty”
+
+Status online → „Tak jak ostatnio widziany”
+
+Zdjęcie profilowe → „Moje kontakty”
+
+Informacje → „Moje kontakty”
+
+Wyłącz automatyczne pobieranie multimediów (mniej interakcji sieciowych)
+
+Usuń nieznane numery – atak wymaga relacji komunikacyjnej.
+
+📱 Signal – konfiguracja prywatności
+
+W aplikacji Signal:
+
+Sealed Sender → upewnij się, że aktywne
+
+„Kto może mnie znaleźć po numerze” → ogranicz
+
+Wyłącz potwierdzenia odczytu
+
+Wyłącz wskaźniki pisania
+
+Signal jest bardziej odporny niż WhatsApp, ale metadane transportowe nadal istnieją.
+
+🔹 WARSTWA 2 – Maskowanie charakterystyki sieci
+
+RTT tracking bazuje na stabilności wzorców.
+Twoim celem jest wprowadzenie entropii.
+
+🌐 1. VPN (nie marketingowy, tylko techniczny)
+
+VPN:
+
+Dodaje dodatkowy hop
+
+Stabilizuje routing
+
+Utrudnia korelację WiFi ↔ LTE
+
+Maskuje IP operatora
+
+Uwaga:
+
+Darmowe VPN-y to ryzyko
+
+Najlepiej: dostawca no-logs lub własny serwer
+
+🌍 2. Sieć Tor (poziom wysoki)
+
+Sieć Tor:
+
+Wysoka latencja
+
+Zmienny routing
+
+Bardzo wysoka entropia RTT
+
+Minus:
+
+WhatsApp nie działa natywnie przez Tor
+
+Signal działa przez proxy
+
+📡 3. Strategia przełączania sieci
+
+Celowo:
+
+Zmieniaj WiFi ↔ LTE
+
+Korzystaj z różnych punktów dostępowych
+
+Restartuj modem
+
+Stałe środowisko = łatwe profilowanie.
+
+🔹 WARSTWA 3 – Ochrona systemowa
+🔥 Firewall mobilny
+
+Android:
+
+NetGuard
+
+RethinkDNS
+
+iOS:
+
+Firewall per-app (MDM / zaawansowane profile)
+
+Blokuj:
+
+połączenia w tle
+
+zbędne keep-alive
+
+✈️ Tryb samolotowy jako tarcza
+
+Gdy nie korzystasz z komunikatora:
+
+Tryb samolotowy
+
+Lub wyłącz dane w tle
+
+Brak łączności = brak sondowania.
+
+🧊 Deep Sleep Hardening
+
+Wyłącz optymalizacje baterii dla komunikatorów
+
+Lub przeciwnie – wymuś agresywne usypianie
+
+Cel: zmienić przewidywalność czasu odpowiedzi.
+
+🔹 WARSTWA 4 – Segmentacja operacyjna (OPSEC)
+
+Jeśli jesteś osobą o podwyższonym ryzyku (aktywiści, dziennikarze, zarządzający finansami):
+
+Oddzielny numer do komunikacji wrażliwej
+
+Oddzielne urządzenie
+
+Brak synchronizacji kontaktów
+
+Brak powiązania z głównym kontem Google/Apple
+
+🔬 WARSTWA 5 – Obrona przed fingerprintingiem czasowym
+
+Zaawansowane:
+
+Używanie sieci o sztucznie wprowadzonym jitterze
+
+Router z QoS generującym losowe opóźnienia
+
+Własny serwer VPN z dodanym losowym delay
+
+Cel: brak stabilnej sygnatury czasowej.
+
+🧩 WARSTWA 6 – Aktualizacje i monitorowanie
+
+Aktualizuj aplikacje regularnie
+
+Śledź changelogi bezpieczeństwa
+
+Obserwuj publikacje naukowe dotyczące metadanych
+
+Firmy reagują – ale z opóźnieniem.
+
+🧠 Rzecz kluczowa: Metadane > Treść
+
+Szyfrowanie end-to-end chroni treść.
+Nie chroni:
+
+kiedy jesteś aktywny
+
+jak długo jesteś online
+
+z jakiej sieci korzystasz
+
+To osobna warstwa prywatności.
+
+📊 Realny poziom redukcji ryzyka
+Poziom	Działania	Redukcja profilowania
+Podstawowy	Ustawienia prywatności	~30%
+Średni	+ VPN	~60%
+Zaawansowany	+ Segmentacja + Firewall	~80%
+OPSEC	+ Tor + Entropia sieci	90%+
+
+(Brak 100% – komunikatory wymagają łączności)
