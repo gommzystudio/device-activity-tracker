@@ -1,57 +1,18 @@
 {
-  "name": "device-activity-tracker",
+  "name": "device-activity-tracker-monorepo",
+  "private": true,
   "version": "1.0.0",
-  "type": "module",
-  "description": "A proof-of-concept tool demonstrating privacy vulnerabilities in messaging apps through RTT-based activity analysis",
-  "main": "dist/index.js",
-  "keywords": [
-    "whatsapp",
-    "signal",
-    "privacy",
-    "security",
-    "research",
-    "tracking",
-    "rtt",
-    "device-activity",
-    "proof-of-concept"
-  ],
-  "author": "Gommzy",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/gommzystudio/device-activity-tracker.git"
-  },
-  "bugs": {
-    "url": "https://github.com/gommzystudio/device-activity-tracker/issues"
-  },
-  "homepage": "https://github.com/gommzystudio/device-activity-tracker#readme",
+  "description": "Root scripts for backend + frontend",
   "scripts": {
-    "build": "tsc",
-    "start": "npx tsx src/index.ts",
-    "start:server": "npm run start:signal-api && npx tsx src/server.ts",
-    "start:signal-api": "npx tsx src/scripts/init-signal.ts",
-    "start:client": "cd client && npm start",
-    "dev": "npm run start:server",
-    "postinstall": "cd client && npm install"
-  },
-  "dependencies": {
-    "@whiskeysockets/baileys": "^7.0.0-rc.9",
-    "cors": "^2.8.5",
-    "express": "^5.0.1",
-    "pdf-parse": "^1.1.1",
-    "pino": "^10.1.0",
-    "qrcode-terminal": "^0.12.0",
-    "socket.io": "^4.8.1",
-    "ws": "^8.18.3"
+    "setup": "npm install --prefix backend && npm install --prefix frontend",
+    "start:server": "npm run start:server --prefix backend",
+    "start:server:with-signal": "npm run start:server:with-signal --prefix backend",
+    "start:client": "npm start --prefix frontend",
+    "dev": "concurrently \"npm run start:server\" \"npm run start:client\"",
+    "dev:with-signal": "concurrently \"npm run start:server:with-signal\" \"npm run start:client\"",
+    "build": "npm run build --prefix backend && npm run build --prefix frontend"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
-    "@types/qrcode-terminal": "^0.12.2",
-    "@types/ws": "^8.18.1",
-    "tailwindcss": "^3.4.18",
-    "tsx": "^4.21.0",
-    "typescript": "^5.7.2"
-  },
-  "private": true
+    "concurrently": "^9.2.1"
+  }
 }

@@ -1,18 +1,20 @@
-# Node modules
+# Dependencies
 node_modules/
-client/node_modules/
+backend/node_modules/
+frontend/node_modules/
 
 # Build outputs
 dist/
 build/
-client/build/
+backend/dist/
+frontend/build/
 
-# WhatsApp authentication data (IMPORTANT: Keep this private!)
+# Runtime/auth data (never commit)
 auth_info_baileys/
 auth_info_multi/
 .wwebjs_auth/
 
-# Environment variables
+# Environment files
 .env
 .env.local
 .env.*.local
@@ -26,6 +28,36 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Coverage and test artifacts
+coverage/
+.nyc_output/
+
+# Caches
+.cache/
+.parcel-cache/
+.npm/
+.eslintcache
+.stylelintcache
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Editors/IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+
 # OS files
 .DS_Store
 .DS_Store?
@@ -34,48 +66,7 @@ lerna-debug.log*
 .Trashes
 ehthumbs.db
 Thumbs.db
-*~
-
-# IDE files
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.project
-.classpath
-.settings/
-*.sublime-project
-*.sublime-workspace
-
-# Testing
-coverage/
-.nyc_output/
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-
-# TypeScript
-*.tsbuildinfo
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-.eslintcache
-
-# Optional stylelint cache
-.stylelintcache
-
-# Dependency directories
-jspm_packages/
-
-# Production build
-/build
 
 # Misc
-.cache
-.parcel-cache
-package-lock.json
+jspm_packages/
+*~

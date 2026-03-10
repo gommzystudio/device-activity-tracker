@@ -30,14 +30,47 @@ The web interface shows real-time RTT measurements, device state detection, and 
 
 ## Installation
 
+### Quick Start (single place, from project root)
+
+```bash
+# Install all dependencies (backend + frontend)
+npm run setup
+
+# Start backend + frontend together
+npm run dev
+```
+
+This runs everything from the root folder so you don't have to `cd` into both apps manually.
+
+### Windows One-Command Start
+
+From PowerShell or CMD at project root:
+
+```bat
+run.cmd
+```
+
+`run.cmd` is interactive:
+- asks whether to use Docker or local mode
+- then asks which run mode to start (full stack / backend only / frontend only)
+- installs missing local dependencies automatically when local mode is selected
+
+### Manual Install
+
 ```bash
 # Clone repository
 git clone https://github.com/gommzystudio/device-activity-tracker.git
 cd device-activity-tracker
 
-# Install dependencies
+# Install backend dependencies
+cd backend
 npm install
-cd client && npm install && cd ..
+cd ..
+
+# Install frontend dependencies
+cd frontend
+npm install
+cd ..
 ```
 
 **Requirements:** Node.js 20+, npm, WhatsApp account
@@ -63,22 +96,34 @@ docker compose up --build
 The application will be available at:
 - Frontend: [http://localhost:3000](http://localhost:3000) (or your configured `CLIENT_PORT`)
 - Backend: [http://localhost:3001](http://localhost:3001) (or your configured `BACKEND_PORT`)
+- Signal API: `http://localhost:8080` (or your configured `API_PORT`)
+
+If port `8080` is already in use on your machine, set both values in `.env` to the same free port, for example:
+
+```env
+API_PORT=8081
+SIGNAL_API_URL=http://localhost:8081
+```
 
 To stop the containers:
 ```bash
 docker compose down
 ```
 
-### Manual Setup
+### Manual Setup (advanced)
 
 #### Web Interface
 
 ```bash
 # Terminal 1: Start backend
+cd backend
 npm run start:server
+# when done: Ctrl+C, then cd ..
 
 # Terminal 2: Start frontend
-npm run start:client
+cd frontend
+npm run start
+# when done: Ctrl+C, then cd ..
 ```
 
 Open `http://localhost:3000`, scan QR code with WhatsApp, then enter phone number to track (e.g., `491701234567`).
@@ -86,7 +131,9 @@ Open `http://localhost:3000`, scan QR code with WhatsApp, then enter phone numbe
 ### CLI Interface (only WhatsApp)
 
 ```bash
+cd backend
 npm start
+# when done: Ctrl+C, then cd ..
 ```
 
 Follow prompts to authenticate and enter target number.
@@ -131,19 +178,32 @@ In the web interface, you can switch between probe methods using the dropdown in
 
 ## Common Issues
 
-- **Not Connecting to WhatsApp**: Delete the `auth_info_baileys/` folder and re-scan the QR code.
+- **`npm run start:server` fails in repo root with `ENOENT package.json`**:
+  run commands from `backend/` and `frontend/` directories, not project root.
+- **Docker error: `Bind for 0.0.0.0:8080 failed: port is already allocated`**:
+  either stop the process using `8080`, or set `.env`:
+  `API_PORT=8081` and `SIGNAL_API_URL=http://localhost:8081`.
+- **Backend port already in use (`EADDRINUSE: 3001`)**:
+  free the port or change `BACKEND_PORT` in `.env`.
+- **Not connecting to WhatsApp**:
+  delete the `auth_info_baileys/` folder/volume and re-scan the QR code.
 
 ## Project Structure
 
 ```
 device-activity-tracker/
-├── src/
-│   ├── tracker.ts         # WhatsApp RTT analysis logic
-│   ├── signal-tracker.ts  # Signal RTT analysis logic
-│   ├── server.ts          # Backend API server (both platforms)
-│   └── index.ts           # CLI interface
-├── client/                # React web interface
-└── package.json
+├── .env.example               # Environment template (ports, API URLs)
+├── backend/
+│   ├── package.json
+│   └── src/
+│       ├── tracker.ts         # WhatsApp RTT analysis logic
+│       ├── signal-tracker.ts  # Signal RTT analysis logic
+│       ├── server.ts          # Backend API server (both platforms)
+│       └── index.ts           # CLI interface
+├── frontend/
+│   ├── package.json
+│   └── src/                   # React web interface
+└── docker-compose.yml         # Full stack orchestration
 ```
 
 ## How to Protect Yourself
