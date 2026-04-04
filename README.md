@@ -74,8 +74,11 @@ docker compose down
 #### Web Interface
 
 ```bash
-# Terminal 1: Start backend
+# Terminal 1.1: Start backend (WhatsApp only)
 npm run start:server
+
+# Terminal 1.2: Start backend (WhatsApp + Signal) Docker needed
+npm run start:server:signal
 
 # Terminal 2: Start frontend
 npm run start:client
