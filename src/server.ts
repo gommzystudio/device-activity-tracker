@@ -11,7 +11,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import { pino } from 'pino';
 import { Boom } from '@hapi/boom';
 import { WhatsAppTracker, ProbeMethod } from './tracker.js';
@@ -50,12 +50,16 @@ const trackers: Map<string, TrackerEntry> = new Map(); // JID/Number -> Tracker 
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    console.log(`Using WA v${version.join('.')}, isLatest: ${isLatest}`);
 
     sock = makeWASocket({
+        version,
         auth: state,
         logger: pino({ level: 'debug' }),
         markOnlineOnConnect: true,
         printQRInTerminal: false,
+        browser: ['Windows', 'Chrome', '120.0.0'],
     });
 
     sock.ev.on('connection.update', async (update: any) => {
@@ -70,10 +74,13 @@ async function connectToWhatsApp() {
         if (connection === 'close') {
             isWhatsAppConnected = false;
             currentWhatsAppQr = null; // Clear QR on close
-            const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('connection closed, reconnecting ', shouldReconnect);
+            const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 405;
+            console.log(`Connection closed (Status: ${statusCode}). Reconnecting: ${shouldReconnect}`);
             if (shouldReconnect) {
-                connectToWhatsApp();
+                setTimeout(() => connectToWhatsApp(), 3000);
+            } else {
+                console.log('⚠️ Session logged out. Please completely stop the server, delete auth_info_baileys, and restart.');
             }
         } else if (connection === 'open') {
             isWhatsAppConnected = true;

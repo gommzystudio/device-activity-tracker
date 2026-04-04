@@ -14,21 +14,21 @@ const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 // prevents Baileys from spamming the console
 const shouldSuppressOutput = (message: string): boolean => {
     return message.includes('Closing session:') ||
-           message.includes('SessionEntry') ||
-           message.includes('_chains') ||
-           message.includes('registrationId') ||
-           message.includes('currentRatchet') ||
-           message.includes('ephemeralKeyPair') ||
-           message.includes('pendingPreKey') ||
-           message.includes('indexInfo') ||
-           message.includes('baseKey') ||
-           message.includes('remoteIdentityKey') ||
-           message.includes('lastRemoteEphemeralKey') ||
-           message.includes('previousCounter') ||
-           message.includes('rootKey') ||
-           message.includes('signedKeyId') ||
-           message.includes('preKeyId') ||
-           message.includes('<Buffer');
+        message.includes('SessionEntry') ||
+        message.includes('_chains') ||
+        message.includes('registrationId') ||
+        message.includes('currentRatchet') ||
+        message.includes('ephemeralKeyPair') ||
+        message.includes('pendingPreKey') ||
+        message.includes('indexInfo') ||
+        message.includes('baseKey') ||
+        message.includes('remoteIdentityKey') ||
+        message.includes('lastRemoteEphemeralKey') ||
+        message.includes('previousCounter') ||
+        message.includes('rootKey') ||
+        message.includes('signedKeyId') ||
+        message.includes('preKeyId') ||
+        message.includes('<Buffer');
 };
 
 if (!debugMode) {
@@ -58,7 +58,7 @@ if (!debugMode) {
 
 // Now safe to import modules
 import '@whiskeysockets/baileys';
-import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import { pino } from 'pino';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode-terminal';
@@ -77,11 +77,17 @@ let currentTracker: WhatsAppTracker | null = null;
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    if (debugMode) {
+        originalConsoleLog(`Using WA v${version.join('.')}, isLatest: ${isLatest}`);
+    }
 
     const sock = makeWASocket({
+        version,
         auth: state,
         logger: pino({ level: 'silent' }),
         markOnlineOnConnect: true,
+        browser: ['Windows', 'Chrome', '120.0.0'],
     });
 
     originalConsoleLog('🔌 Connecting to WhatsApp... (use the --debug flag for more details)');
@@ -103,12 +109,15 @@ async function connectToWhatsApp() {
                 currentTracker = null;
             }
 
-            const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+            const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 405;
             if (debugMode) {
-                originalConsoleLog('connection closed due to ', lastDisconnect?.error, ', reconnecting ', shouldReconnect);
+                originalConsoleLog(`connection closed due to error (Status: ${statusCode}): `, lastDisconnect?.error, ', reconnecting ', shouldReconnect);
             }
             if (shouldReconnect) {
-                connectToWhatsApp();
+                setTimeout(() => connectToWhatsApp(), 3000);
+            } else {
+                originalConsoleLog('⚠️ Session logged out. Please completely stop the process, delete auth_info_baileys, and restart.');
             }
         } else if (connection === 'open') {
             originalConsoleLog('✅ Connected to WhatsApp');
