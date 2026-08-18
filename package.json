@@ -28,7 +28,7 @@
   "scripts": {
     "build": "tsc",
     "start": "npx tsx src/index.ts",
-    "start:server": "npm run start:signal-api && npx tsx src/server.ts",
+    "start:server": "npm run start:signal-api || true && npx tsx src/server.ts",
     "start:signal-api": "npx tsx src/scripts/init-signal.ts",
     "start:client": "cd client && npm start",
     "dev": "npm run start:server",
