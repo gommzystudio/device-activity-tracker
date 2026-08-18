@@ -4,7 +4,11 @@ import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
 
 // Create socket with autoConnect disabled so we can add listeners before connecting
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+// Derive backend URL from the page's host so Docker/remote deploys work without rebuild.
+// Override with REACT_APP_API_URL (build-time) or REACT_APP_SOCKET_URL (runtime).
+const API_URL = process.env.REACT_APP_API_URL
+    || process.env.REACT_APP_SOCKET_URL
+    || `${window.location.protocol}//${window.location.hostname}:3001`;
 export const socket: Socket = io(API_URL, { autoConnect: false });
 
 export type Platform = 'whatsapp' | 'signal';
